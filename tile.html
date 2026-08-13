@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>디자인상상 · 타일 수량 산출 프로그램</title>
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F4F1E8;
+  --surface:#FFFFFF;
+  --surface-2:#FBF9F3;
+  --ink:#221F19;
+  --ink-dim:#6E6656;
+  --ink-faint:#A79E8B;
+  --line:#E2DBC8;
+  --line-strong:#CFC5AA;
+  --accent:#7B5A34;
+  --accent-deep:#4E3A21;
+  --accent-soft:#EFE4CE;
+  --pine:#20301F;
+  --pine-2:#2C4429;
+  --radius:10px;
+  --shadow:0 1px 2px rgba(34,31,25,.06), 0 8px 24px -10px rgba(34,31,25,.18);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:'Pretendard Variable','Pretendard',-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+  font-size:14px; line-height:1.5; -webkit-font-smoothing:antialiased;
+}
+.num,.mono{font-family:'JetBrains Mono','SFMono-Regular',ui-monospace,Menlo,Consolas,monospace; font-variant-numeric:tabular-nums;}
+button{font-family:inherit; cursor:pointer;}
+input,select,textarea{font-family:inherit;}
+
+.topbar{
+  background:var(--accent-deep); color:#F2EEDF; padding:18px 28px;
+  display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; border-bottom:3px solid var(--accent);
+}
+.topbar .brand-mark{font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.14em; border:1px solid rgba(242,238,223,.4); padding:3px 7px; border-radius:4px; opacity:.85;}
+.topbar h1{font-size:19px; font-weight:800; margin:0; letter-spacing:-.01em;}
+.topbar .sub{font-size:12.5px; color:rgba(242,238,223,.68); margin-left:auto;}
+
+.meta-bar{
+  background:var(--surface); border-bottom:1px solid var(--line); padding:14px 28px;
+  display:grid; grid-template-columns:repeat(3,minmax(150px,1fr)); gap:14px 22px;
+}
+.meta-field label{display:block; font-size:10.5px; letter-spacing:.06em; color:var(--ink-faint); text-transform:uppercase; margin-bottom:4px; font-weight:600;}
+.meta-field input{width:100%; border:none; border-bottom:1.5px solid var(--line-strong); background:transparent; padding:3px 2px 6px; font-size:14.5px; color:var(--ink); font-weight:600;}
+.meta-field input:focus{outline:none; border-bottom-color:var(--accent);}
+
+.layout{display:grid; grid-template-columns:1fr 340px; gap:0; align-items:start;}
+.main{padding:26px 30px 80px; min-width:0;}
+.summary{position:sticky; top:0; height:100vh; overflow-y:auto; border-left:1px solid var(--line); background:var(--surface); padding:22px 20px 30px;}
+
+.section{
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+  box-shadow:var(--shadow); padding:18px 20px; margin-bottom:16px;
+}
+.section-head{display:flex; align-items:center; gap:10px; margin-bottom:14px;}
+.section-no{
+  font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:700; width:24px; height:24px;
+  border-radius:6px; background:var(--accent-soft); color:var(--accent-deep);
+  display:flex; align-items:center; justify-content:center; flex:none;
+}
+.section-title{font-size:14.5px; font-weight:800;}
+.section-desc{font-size:11.5px; color:var(--ink-faint); margin-top:2px;}
+
+.field-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+.field{margin-bottom:2px;}
+.field label{display:block; font-size:11.5px; font-weight:700; color:var(--ink-dim); margin-bottom:6px;}
+.field .len-input-wrap{display:flex; align-items:center; gap:6px;}
+.field input[type=number]{
+  width:100%; padding:9px 11px; border:1.3px solid var(--line-strong); border-radius:8px; font-size:14px; background:#fff;
+}
+.field input[type=number]:focus{outline:none; border-color:var(--accent);}
+.unit-suffix{font-size:12px; color:var(--ink-faint); flex:none;}
+
+.opt-list{display:flex; flex-direction:column; gap:6px;}
+.opt-row{
+  display:flex; align-items:center; gap:10px; padding:9px 11px;
+  border:1.3px solid var(--line); border-radius:8px; background:var(--surface-2);
+}
+.opt-row.selected{border-color:var(--accent); background:var(--accent-soft);}
+.opt-row input[type=radio], .opt-row input[type=checkbox]{accent-color:var(--accent); width:16px; height:16px; flex:none;}
+.opt-row .opt-label{flex:1; font-size:13px; font-weight:600; cursor:pointer;}
+.opt-row .opt-price{
+  font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--ink-dim); display:flex; align-items:center; gap:3px;
+}
+.opt-price input{
+  width:88px; padding:5px 7px; border:1.3px solid var(--line-strong); border-radius:6px; text-align:right; font-size:12px; background:#fff;
+}
+.opt-price-unit{color:var(--ink-faint); font-size:11px;}
+
+.qty-mini{display:flex; align-items:center; gap:6px;}
+.qty-mini input{width:60px; padding:6px 7px; border:1.3px solid var(--line-strong); border-radius:6px; text-align:center; font-size:12.5px;}
+
+.section-subtotal{
+  display:flex; justify-content:flex-end; gap:8px; padding-top:10px; margin-top:4px;
+  border-top:1px dashed var(--line); font-size:12px; color:var(--ink-dim);
+}
+.section-subtotal b{color:var(--accent-deep); font-family:'JetBrains Mono',monospace;}
+
+/* Summary panel (shared look with estimate calc) */
+.summary-title{font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-faint); font-weight:700; margin-bottom:14px;}
+.summary-list{list-style:none; margin:0 0 14px; padding:0;}
+.summary-list li{display:flex; justify-content:space-between; align-items:baseline; padding:7px 0; font-size:12.5px; color:var(--ink-dim); border-bottom:1px dashed var(--line);}
+.summary-list li .amt{font-family:'JetBrains Mono',monospace; color:var(--ink); font-weight:600;}
+.summary-list li.strong{font-weight:700; color:var(--ink);}
+.summary-list li.indent{padding-left:10px; font-size:12px; color:var(--ink-faint);}
+
+.total-card{margin-top:16px; background:linear-gradient(155deg,var(--pine),var(--pine-2)); color:#F2EEDF; border-radius:12px; padding:18px 18px 20px;}
+.total-card .label{font-size:11px; letter-spacing:.1em; text-transform:uppercase; opacity:.72; font-weight:700; margin-bottom:6px;}
+.total-card .value{font-family:'JetBrains Mono',monospace; font-size:27px; font-weight:800; letter-spacing:-.01em;}
+.total-card .vat-note{font-size:11px; opacity:.6; margin-top:6px;}
+
+.breakdown{margin-top:18px;}
+.breakdown-title{font-size:11px; color:var(--ink-faint); font-weight:700; margin-bottom:8px; text-transform:uppercase; letter-spacing:.06em;}
+.breakdown-row{display:flex; justify-content:space-between; font-size:11.5px; padding:5px 0; color:var(--ink-dim);}
+.breakdown-row .amt{font-family:'JetBrains Mono',monospace;}
+.breakdown-row.zero{opacity:.4;}
+
+.action-row{display:flex; gap:8px; margin-top:18px;}
+.btn-secondary{flex:1; background:var(--surface-2); border:1.3px solid var(--line-strong); color:var(--ink); padding:10px 8px; border-radius:8px; font-size:12.5px; font-weight:700;}
+.btn-secondary:hover{background:var(--accent-soft); border-color:var(--accent);}
+.btn-primary{flex:1; background:var(--ink); color:#fff; border:none; padding:10px 8px; border-radius:8px; font-size:12.5px; font-weight:700;}
+.btn-primary:hover{background:var(--accent-deep);}
+.footnote{margin-top:16px; font-size:10.8px; color:var(--ink-faint); line-height:1.55; border-top:1px solid var(--line); padding-top:12px;}
+
+/* Print */
+#printArea{display:none;}
+@media print{
+  body *{visibility:hidden;}
+  #printArea, #printArea *{visibility:visible;}
+  #printArea{display:block; position:absolute; top:0; left:0; width:100%; padding:24px; font-size:12px;}
+  .p-title{font-size:20px; font-weight:800; text-align:center; letter-spacing:.3em; margin-bottom:4px;}
+  .p-sub{text-align:center; font-size:10px; color:#666; margin-bottom:18px;}
+  .p-meta{display:grid; grid-template-columns:1fr 1fr; gap:6px 24px; font-size:11px; margin-bottom:16px; border:1px solid #999; padding:10px 14px; border-radius:6px;}
+  .p-meta div span{color:#666;}
+  table.p-table{width:100%; border-collapse:collapse; margin-bottom:4px;}
+  table.p-table th, table.p-table td{border:1px solid #ccc; padding:5px 7px; font-size:11px;}
+  table.p-table th{background:#eee;}
+  .p-right{text-align:right;}
+  .p-totals{width:320px; margin-left:auto; margin-top:12px; border-collapse:collapse;}
+  .p-totals td{padding:5px 8px; font-size:11.5px; border-bottom:1px solid #ddd;}
+  .p-totals tr.final td{font-weight:800; font-size:14px; border-top:2px solid #222; border-bottom:none;}
+  .p-note{margin-top:18px; font-size:10px; color:#777; line-height:1.6;}
+}
+
+@media (max-width:980px){
+  .layout{grid-template-columns:1fr;}
+  .summary{position:static; height:auto; border-left:none; border-top:1px solid var(--line);}
+  .field-grid{grid-template-columns:1fr;}
+}
+
+/* ===== Space instance cards ===== */
+.space-card{
+  border:1px solid var(--line); border-radius:8px; background:var(--surface-2);
+  padding:14px 16px; margin-bottom:12px;
+}
+.space-card-title{font-size:13px; font-weight:800; color:var(--accent-deep); margin-bottom:10px;}
+.sub-opt{
+  margin-top:10px; padding-top:10px; border-top:1px dashed var(--line);
+}
+.sub-opt-row{display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap;}
+.sub-opt-row label.chk{display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; color:var(--ink-dim); cursor:pointer;}
+.sub-opt-row input[type=checkbox]{accent-color:var(--accent); width:15px; height:15px;}
+.sub-fields{
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:8px;
+  margin-top:6px; padding:10px; background:var(--surface); border-radius:6px; border:1px solid var(--line);
+}
+.sub-fields .mini-field label{display:block; font-size:10.5px; color:var(--ink-faint); margin-bottom:3px; font-weight:600;}
+.sub-fields .mini-field input, .sub-fields .mini-field select{
+  width:100%; padding:6px 8px; border:1.3px solid var(--line-strong); border-radius:6px; font-size:12.5px;
+}
+.type-toggle{display:flex; gap:6px; margin-top:2px;}
+.type-toggle label{
+  flex:1; text-align:center; padding:6px 8px; border:1.3px solid var(--line-strong); border-radius:6px;
+  font-size:11.5px; font-weight:600; cursor:pointer; color:var(--ink-dim);
+}
+.type-toggle input{display:none;}
+.type-toggle input:checked + span{color:#fff;}
+.type-toggle label:has(input:checked){background:var(--accent); border-color:var(--accent); color:#fff;}
+
+/* ===== Breakdown table ===== */
+table.tile-breakdown{width:100%; border-collapse:collapse; font-size:11.5px; margin-top:4px;}
+table.tile-breakdown th{
+  text-align:left; padding:6px 4px; border-bottom:1.5px solid var(--line-strong); color:var(--ink-faint);
+  font-size:10px; text-transform:uppercase; letter-spacing:.03em;
+}
+table.tile-breakdown td{padding:6px 4px; border-bottom:1px solid var(--line);}
+table.tile-breakdown tr:last-child td{border-bottom:none;}
+table.tile-breakdown .num{text-align:right;}
+table.tile-breakdown .grp-row td{padding-top:12px; font-weight:800; color:var(--accent-deep); border-bottom:1.5px solid var(--line-strong);}
+
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <span class="brand-mark">DESIGN SANGSANG</span>
+    <h1>타일 수량 산출 프로그램</h1>
+    <span class="sub">독립 버전 · 아직 전체 견적서와 연동되지 않음</span>
+  </header>
+
+  <div class="meta-bar">
+    <div class="meta-field"><label>프로젝트 / 공사명</label><input type="text" data-meta="project" placeholder="예: OO아파트 주방 리모델링"></div>
+    <div class="meta-field"><label>고객명</label><input type="text" data-meta="customer" placeholder="고객님 성함"></div>
+    <div class="meta-field"><label>견적일</label><input type="date" data-meta="date"></div>
+  </div>
+
+  <div class="layout">
+    <main class="main" id="main-content"></main>
+    <aside class="summary" id="summary-content"></aside>
+  </div>
+</div>
+
+<div id="printArea"></div>
+
+<script>
+/* ============ Constants ============ */
+const SPACE_TYPES = [
+  {key:'entrance', label:'현관'},
+  {key:'anteroom', label:'전실'},
+  {key:'balcony',  label:'발코니'},
+  {key:'bathroom', label:'화장실'},
+];
+const DEFAULT_BOX_AREA = 1.44; // m² per box, standard assumption unless overridden
+
+function newTileCfg(tw, th){ return { tileW:tw, tileH:th, customBox:false, boxArea:DEFAULT_BOX_AREA }; }
+const DEFAULTS = {
+  entrance: ()=>({w:1200,d:1000, tile:newTileCfg(300,300)}),
+  anteroom: ()=>({w:1500,d:1200, tile:newTileCfg(300,300)}),
+  balcony:  ()=>({w:3600,d:1200, tile:newTileCfg(300,300)}),
+  bathroom: ()=>({w:2000,d:1800,h:2400, partition:false, partitionW:600, gendai:false, gendaiType:'sink', gendaiLen:900, gendaiDepth:200, gendaiFrontH:150,
+    floorTile:newTileCfg(300,300), wallTile:newTileCfg(300,600)}),
+};
+
+/* ============ State ============ */
+const state = {
+  counts: { entrance:1, anteroom:0, balcony:1, bathroom:1 },
+  entrance: [], anteroom: [], balcony: [], bathroom: [],
+  kitchenWall: { w:3600, h:600, tile:newTileCfg(300,600) },
+  wasteRate: 10,
+  meta: { customer:'', project:'', date:new Date().toISOString().slice(0,10) },
+};
+function resizeInstances(key){
+  const need = state.counts[key];
+  const arr = state[key];
+  while(arr.length < need) arr.push(DEFAULTS[key]());
+  while(arr.length > need) arr.pop();
+}
+SPACE_TYPES.forEach(t=>resizeInstances(t.key));
+
+/* ============ Helpers ============ */
+function won(n){ n = Math.round(n||0); return n.toLocaleString('ko-KR'); }
+function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function areaM2(w,d){ return (w*d)/1e6; }
+function tilesNeeded(areaM2_, tw, th){
+  const tileArea = (tw*th)/1e6;
+  if(!tileArea || !areaM2_) return 0;
+  const raw = areaM2_*(1+state.wasteRate/100)/tileArea;
+  return Math.ceil(raw - 1e-9); // guard against float noise
+}
+function piecesPerBox(tw, th, boxArea){
+  const tileArea = (tw*th)/1e6;
+  if(!tileArea) return 1;
+  return Math.max(1, Math.round(boxArea/tileArea - 1e-9));
+}
+function boxesNeeded(pieces, tw, th, boxArea){
+  const ppb = piecesPerBox(tw, th, boxArea);
+  return Math.ceil(pieces/ppb - 1e-9);
+}
+
+/* ============ Compute ============ */
+function computeGroups(){
+  const groups = [];
+
+  function floorGroup(key, label){
+    const items = state[key].map((sp,i)=>{
+      const a = areaM2(sp.w, sp.d);
+      const tiles = tilesNeeded(a, sp.tile.tileW, sp.tile.tileH);
+      const boxArea = sp.tile.customBox ? sp.tile.boxArea : DEFAULT_BOX_AREA;
+      const boxes = boxesNeeded(tiles, sp.tile.tileW, sp.tile.tileH, boxArea);
+      return {name: label+' '+(i+1), area:a, tiles, boxes, tileSize:sp.tile.tileW+'×'+sp.tile.tileH+'mm'};
+    });
+    const totalArea = items.reduce((s,it)=>s+it.area,0);
+    const totalTiles = items.reduce((s,it)=>s+it.tiles,0);
+    const totalBoxes = items.reduce((s,it)=>s+it.boxes,0);
+    groups.push({key, label, items, totalArea, totalTiles, totalBoxes, perInstanceTile:true});
+  }
+
+  floorGroup('entrance','현관 바닥');
+  floorGroup('anteroom','전실 바닥');
+  floorGroup('balcony','발코니 바닥');
+
+  const bFloorItems=[], bWallItems=[], bGendaiItems=[];
+  state.bathroom.forEach((sp,i)=>{
+    const name = '화장실 '+(i+1);
+    const floorA = areaM2(sp.w, sp.d);
+    const fBoxArea = sp.floorTile.customBox ? sp.floorTile.boxArea : DEFAULT_BOX_AREA;
+    const fTiles = tilesNeeded(floorA, sp.floorTile.tileW, sp.floorTile.tileH);
+    bFloorItems.push({name, area:floorA, tiles:fTiles, boxes:boxesNeeded(fTiles, sp.floorTile.tileW, sp.floorTile.tileH, fBoxArea), tileSize:sp.floorTile.tileW+'×'+sp.floorTile.tileH+'mm'});
+
+    let wallA = 2*(sp.w+sp.d)*sp.h/1e6;
+    let wallNote = '둘레×높이';
+    if(sp.partition){
+      wallA += (sp.partitionW*sp.h*2)/1e6;
+      wallNote += ' + 조적파티션(양면)';
+    }
+    const wBoxArea = sp.wallTile.customBox ? sp.wallTile.boxArea : DEFAULT_BOX_AREA;
+    const wTiles = tilesNeeded(wallA, sp.wallTile.tileW, sp.wallTile.tileH);
+    bWallItems.push({name, area:wallA, tiles:wTiles, boxes:boxesNeeded(wTiles, sp.wallTile.tileW, sp.wallTile.tileH, wBoxArea), note:wallNote, tileSize:sp.wallTile.tileW+'×'+sp.wallTile.tileH+'mm'});
+
+    if(sp.gendai){
+      const gLen = sp.gendaiType==='full' ? sp.w : sp.gendaiLen;
+      const gArea = (gLen*sp.gendaiDepth + gLen*sp.gendaiFrontH)/1e6;
+      const gTiles = tilesNeeded(gArea, sp.wallTile.tileW, sp.wallTile.tileH);
+      bGendaiItems.push({name, area:gArea, tiles:gTiles, boxes:boxesNeeded(gTiles, sp.wallTile.tileW, sp.wallTile.tileH, wBoxArea), note:(sp.gendaiType==='full'?'벽 전체':'세면대까지')+' '+gLen+'mm', tileSize:sp.wallTile.tileW+'×'+sp.wallTile.tileH+'mm (벽타일과 동일)'});
+    }
+  });
+  const sumArea = arr=>arr.reduce((s,it)=>s+it.area,0);
+  const sumTiles = arr=>arr.reduce((s,it)=>s+it.tiles,0);
+  const sumBoxes = arr=>arr.reduce((s,it)=>s+it.boxes,0);
+  groups.push({key:'bathroomFloor', label:'화장실 바닥', items:bFloorItems, totalArea:sumArea(bFloorItems), totalTiles:sumTiles(bFloorItems), totalBoxes:sumBoxes(bFloorItems), perInstanceTile:true});
+  groups.push({key:'bathroomWall', label:'화장실 벽', items:bWallItems, totalArea:sumArea(bWallItems), totalTiles:sumTiles(bWallItems), totalBoxes:sumBoxes(bWallItems), perInstanceTile:true});
+  if(bGendaiItems.length){
+    groups.push({key:'bathroomGendai', label:'화장실 젠다이', items:bGendaiItems, totalArea:sumArea(bGendaiItems), totalTiles:sumTiles(bGendaiItems), totalBoxes:sumBoxes(bGendaiItems), perInstanceTile:true});
+  }
+
+  const k = state.kitchenWall;
+  const kA = areaM2(k.w, k.h);
+  const kBoxArea = k.tile.customBox ? k.tile.boxArea : DEFAULT_BOX_AREA;
+  const kTiles = tilesNeeded(kA, k.tile.tileW, k.tile.tileH);
+  groups.push({key:'kitchenWall', label:'주방벽', items:[{name:'주방벽', area:kA, tiles:kTiles, boxes:boxesNeeded(kTiles, k.tile.tileW, k.tile.tileH, kBoxArea), tileSize:k.tile.tileW+'×'+k.tile.tileH+'mm'}], totalArea:kA, totalTiles:kTiles, totalBoxes:boxesNeeded(kTiles, k.tile.tileW, k.tile.tileH, kBoxArea), perInstanceTile:true});
+
+  return groups;
+}
+function computeTotals(){
+  const groups = computeGroups().filter(g=>g.items.length>0);
+  const grandArea = groups.reduce((s,g)=>s+g.totalArea,0);
+  const grandTiles = groups.reduce((s,g)=>s+g.totalTiles,0);
+  const grandBoxes = groups.reduce((s,g)=>s+g.totalBoxes,0);
+  return {groups, grandArea, grandTiles, grandBoxes};
+}
+
+/* ============ DOM refs ============ */
+const $main = document.getElementById('main-content');
+const $summary = document.getElementById('summary-content');
+
+/* ============ Render ============ */
+function section(no, title, desc, bodyHtml){
+  return '<div class="section"><div class="section-head"><span class="section-no">'+no+'</span>'+
+    '<div><div class="section-title">'+title+'</div>'+(desc?'<div class="section-desc">'+desc+'</div>':'')+'</div></div>'+
+    bodyHtml+'</div>';
+}
+function render(){ renderMain(); renderSummary(); }
+
+function tileFieldsHTML(prefix, tileCfg){
+  return ''+
+    '<div class="field-grid" style="margin-top:8px;">'+
+      '<div class="field"><label>타일 가로</label><div class="len-input-wrap"><input type="number" step="10" min="0" id="'+prefix+'-tw" value="'+tileCfg.tileW+'"><span class="unit-suffix">mm</span></div></div>'+
+      '<div class="field"><label>타일 세로</label><div class="len-input-wrap"><input type="number" step="10" min="0" id="'+prefix+'-th" value="'+tileCfg.tileH+'"><span class="unit-suffix">mm</span></div></div>'+
+    '</div>'+
+    '<div class="sub-opt-row" style="margin-top:8px;">'+
+      '<label class="chk"><input type="checkbox" id="'+prefix+'-custombox" '+(tileCfg.customBox?'checked':'')+'> 박스 단위가 다름 (기본 1.44㎡/박스)</label>'+
+    '</div>'+
+    (tileCfg.customBox ? '<div class="sub-fields"><div class="mini-field"><label>박스당 면적</label><input type="number" step="0.01" min="0" id="'+prefix+'-boxarea" value="'+tileCfg.boxArea+'"></div><div class="mini-field"><label>단위</label><input type="text" value="㎡ / 박스" disabled></div></div>' : '');
+}
+
+function renderMain(){
+  let html = '';
+
+  html += section(1, '공간 구성', '이 집에 몇 개씩 있는지 입력하세요.', ''+
+    '<div class="field-grid">'+
+      SPACE_TYPES.map(t=>''+
+        '<div class="field"><label>'+t.label+' 개수</label><div class="len-input-wrap"><input type="number" min="0" max="10" id="cnt-'+t.key+'" value="'+state.counts[t.key]+'"><span class="unit-suffix">개</span></div></div>'
+      ).join('')+
+    '</div>'+
+    '<div class="section-desc" style="margin-top:8px;">주방벽은 아래에서 별도로 입력해요 (추후 주방 계산기와 연동 예정).</div>');
+
+  html += '<div id="cards-wrap"></div>';
+
+  $main.innerHTML = html;
+  renderCardsSection();
+  bindCountEvents();
+}
+
+function cardsBodyHTML(){
+  let body = '';
+  SPACE_TYPES.forEach(t=>{
+    if(t.key==='bathroom') return;
+    state[t.key].forEach((sp,i)=>{
+      const prefix = t.key+'-'+i;
+      body += '<div class="space-card"><div class="space-card-title">'+t.label+' '+(i+1)+'</div>'+
+        '<div class="field-grid">'+
+          '<div class="field"><label>가로</label><div class="len-input-wrap"><input type="number" step="10" min="0" id="dim-'+prefix+'-w" value="'+sp.w+'"><span class="unit-suffix">mm</span></div></div>'+
+          '<div class="field"><label>세로</label><div class="len-input-wrap"><input type="number" step="10" min="0" id="dim-'+prefix+'-d" value="'+sp.d+'"><span class="unit-suffix">mm</span></div></div>'+
+        '</div>'+
+        tileFieldsHTML('tile-'+prefix, sp.tile)+
+      '</div>';
+    });
+  });
+  state.bathroom.forEach((sp,i)=>{ body += bathroomCardHTML(sp, i); });
+  body += '<div class="space-card"><div class="space-card-title">주방벽</div>'+
+    '<div class="field-grid">'+
+      '<div class="field"><label>가로</label><div class="len-input-wrap"><input type="number" step="10" min="0" id="dim-kitchen-w" value="'+state.kitchenWall.w+'"><span class="unit-suffix">mm</span></div></div>'+
+      '<div class="field"><label>높이</label><div class="len-input-wrap"><input type="number" step="10" min="0" id="dim-kitchen-h" value="'+state.kitchenWall.h+'"><span class="unit-suffix">mm</span></div></div>'+
+    '</div>'+
+    tileFieldsHTML('tile-kitchen', state.kitchenWall.tile)+
+  '</div>';
+  return body;
+}
+
+function renderCardsSection(){
+  const wrap = document.getElementById('cards-wrap');
+  wrap.innerHTML = section(2, '공간별 치수 및 타일 사이즈', '공간마다 실제 시공에 쓸 타일 규격을 함께 입력하세요. 박스 포장 단위가 1.44㎡가 아니면 체크 후 직접 입력하세요.', cardsBodyHTML());
+  bindCardEvents();
+}
+
+function bathroomCardHTML(sp, i){
+  return '<div class="space-card"><div class="space-card-title">화장실 '+(i+1)+'</div>'+
+    '<div class="field-grid">'+
+      '<div class="field"><label>가로</label><div class="len-input-wrap"><input type="number" step="10" min="0" id="dim-bathroom-'+i+'-w" value="'+sp.w+'"><span class="unit-suffix">mm</span></div></div>'+
+      '<div class="field"><label>세로</label><div class="len-input-wrap"><input type="number" step="10" min="0" id="dim-bathroom-'+i+'-d" value="'+sp.d+'"><span class="unit-suffix">mm</span></div></div>'+
+      '<div class="field"><label>천장 높이</label><div class="len-input-wrap"><input type="number" step="10" min="0" id="dim-bathroom-'+i+'-h" value="'+sp.h+'"><span class="unit-suffix">mm</span></div></div>'+
+    '</div>'+
+    '<div class="sub-opt">'+
+      '<div class="sub-opt-row"><label class="chk"><input type="checkbox" id="chk-partition-'+i+'" '+(sp.partition?'checked':'')+'> 조적 파티션 있음</label></div>'+
+      (sp.partition ? '<div class="sub-fields"><div class="mini-field"><label>파티션 폭</label><input type="number" step="10" min="0" id="partitionW-'+i+'" value="'+sp.partitionW+'"></div><div class="mini-field"><label>단위</label><input type="text" value="mm (양면 계산)" disabled></div></div>' : '')+
+      '<div class="sub-opt-row" style="margin-top:10px;"><label class="chk"><input type="checkbox" id="chk-gendai-'+i+'" '+(sp.gendai?'checked':'')+'> 젠다이 있음</label></div>'+
+      (sp.gendai ? ''+
+        '<div class="type-toggle">'+
+          '<label><input type="radio" name="gendaiType-'+i+'" value="full" '+(sp.gendaiType==='full'?'checked':'')+'><span>벽 전체를 채움</span></label>'+
+          '<label><input type="radio" name="gendaiType-'+i+'" value="sink" '+(sp.gendaiType==='sink'?'checked':'')+'><span>세면대까지만</span></label>'+
+        '</div>'+
+        '<div class="sub-fields">'+
+          (sp.gendaiType==='sink' ? '<div class="mini-field"><label>젠다이 길이</label><input type="number" step="10" min="0" id="gendaiLen-'+i+'" value="'+sp.gendaiLen+'"></div>' : '')+
+          '<div class="mini-field"><label>상판 깊이</label><input type="number" step="10" min="0" id="gendaiDepth-'+i+'" value="'+sp.gendaiDepth+'"></div>'+
+          '<div class="mini-field"><label>전면 높이</label><input type="number" step="10" min="0" id="gendaiFrontH-'+i+'" value="'+sp.gendaiFrontH+'"></div>'+
+        '</div>'
+      : '')+
+    '</div>'+
+    '<div class="subgroup-title" style="margin-top:14px;">바닥 타일</div>'+tileFieldsHTML('tile-bathfloor-'+i, sp.floorTile)+
+    '<div class="subgroup-title" style="margin-top:14px;">벽 타일 (젠다이 포함)</div>'+tileFieldsHTML('tile-bathwall-'+i, sp.wallTile)+
+  '</div>';
+}
+
+function bindCountEvents(){
+  SPACE_TYPES.forEach(t=>{
+    const el = document.getElementById('cnt-'+t.key);
+    el.addEventListener('input', ()=>{
+      const v = Math.max(0, Math.min(10, parseInt(el.value||'0',10)||0));
+      state.counts[t.key] = v;
+      resizeInstances(t.key);
+      // Only the cards section depends on counts -- rebuild just that, so this
+      // count input itself is never destroyed and never loses focus mid-type.
+      renderCardsSection();
+      renderSummary();
+    });
+  });
+}
+
+function bindCardEvents(){  const bindDim = (id, setter)=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.addEventListener('input', ()=>{ setter(Number(el.value)||0); renderSummary(); });
+  };
+  const bindCheck = (id, setter)=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.addEventListener('change', e=>{ setter(e.target.checked); renderCardsSection(); renderSummary(); });
+  };
+  const bindTileCfg = (prefix, cfg)=>{
+    bindDim(prefix+'-tw', v=>cfg.tileW=v);
+    bindDim(prefix+'-th', v=>cfg.tileH=v);
+    bindDim(prefix+'-boxarea', v=>cfg.boxArea=v);
+    bindCheck(prefix+'-custombox', v=>cfg.customBox=v);
+  };
+
+  SPACE_TYPES.forEach(t=>{
+    if(t.key==='bathroom') return;
+    state[t.key].forEach((sp,i)=>{
+      const prefix = t.key+'-'+i;
+      bindDim('dim-'+prefix+'-w', v=>sp.w=v);
+      bindDim('dim-'+prefix+'-d', v=>sp.d=v);
+      bindTileCfg('tile-'+prefix, sp.tile);
+    });
+  });
+  bindDim('dim-kitchen-w', v=>state.kitchenWall.w=v);
+  bindDim('dim-kitchen-h', v=>state.kitchenWall.h=v);
+  bindTileCfg('tile-kitchen', state.kitchenWall.tile);
+
+  state.bathroom.forEach((sp,i)=>{
+    bindDim('dim-bathroom-'+i+'-w', v=>sp.w=v);
+    bindDim('dim-bathroom-'+i+'-d', v=>sp.d=v);
+    bindDim('dim-bathroom-'+i+'-h', v=>sp.h=v);
+    bindDim('partitionW-'+i, v=>sp.partitionW=v);
+    bindDim('gendaiLen-'+i, v=>sp.gendaiLen=v);
+    bindDim('gendaiDepth-'+i, v=>sp.gendaiDepth=v);
+    bindDim('gendaiFrontH-'+i, v=>sp.gendaiFrontH=v);
+    bindCheck('chk-partition-'+i, v=>sp.partition=v);
+    bindCheck('chk-gendai-'+i, v=>sp.gendai=v);
+    document.querySelectorAll('input[name="gendaiType-'+i+'"]').forEach(r=>{
+      r.addEventListener('change', e=>{ sp.gendaiType=e.target.value; renderCardsSection(); renderSummary(); });
+    });
+    bindTileCfg('tile-bathfloor-'+i, sp.floorTile);
+    bindTileCfg('tile-bathwall-'+i, sp.wallTile);
+  });
+}
+
+/* ============ Summary ============ */
+function renderSummary(){
+  const t = computeTotals();
+  let html = '<div class="summary-title">타일 수량 요약</div>';
+
+  html += '<div class="field" style="margin-bottom:14px;"><label>로스율 (절단 손실 포함)</label>'+
+    '<div class="len-input-wrap"><input type="number" step="1" min="0" max="50" id="f-waste" value="'+state.wasteRate+'"><span class="unit-suffix">%</span></div></div>';
+
+  html += '<div class="total-card"><div class="label">총 필요 수량</div><div class="value">'+won(t.grandTiles)+'장 · '+won(t.grandBoxes)+'박스</div><div class="vat-note">총 시공 면적 약 '+t.grandArea.toFixed(1)+'㎡ 기준</div></div>';
+
+  html += '<div class="breakdown"><div class="breakdown-title">공간별 내역</div>';
+  t.groups.forEach(g=>{
+    html += '<div style="margin-top:12px; font-size:12px; font-weight:800; color:var(--accent-deep);">'+g.label+'</div>';
+    g.items.forEach(it=>{
+      html += '<div class="breakdown-row"><span>'+it.name+' <span style="color:var(--ink-faint); font-size:10px;">('+it.tileSize+(it.note?', '+it.note:'')+')</span></span><span class="amt">'+it.tiles+'장 · '+it.boxes+'박스</span></div>';
+    });
+    html += '<div class="breakdown-row" style="font-weight:700; border-top:1px dashed var(--line); margin-top:2px; padding-top:6px;"><span>소계 ('+g.totalArea.toFixed(1)+'㎡)</span><span class="amt">'+g.totalTiles+'장 · '+g.totalBoxes+'박스</span></div>';
+  });
+  html += '</div>';
+
+  html += '<div class="action-row"><button class="btn-secondary" id="btn-reset">초기화</button><button class="btn-primary" id="btn-print">내역서 출력</button></div>';
+  html += '<div class="footnote">박스 환산은 1.44㎡/박스 기준이며, 공급받는 타일의 실제 박스 단위가 다르면 각 공간의 "박스 단위가 다름" 체크 후 조정하세요. 로스율은 절단·파손 등을 감안한 여유분입니다.</div>';
+
+  $summary.innerHTML = html;
+  document.getElementById('f-waste').addEventListener('input', e=>{
+    state.wasteRate = Number(e.target.value)||0;
+    renderSummary();
+  });
+  document.getElementById('btn-reset').addEventListener('click', ()=>{
+    if(confirm('모든 입력값을 초기화할까요?')) resetAll();
+  });
+  document.getElementById('btn-print').addEventListener('click', buildPrintView);
+}
+
+function resetAll(){
+  state.counts = { entrance:1, anteroom:0, balcony:1, bathroom:1 };
+  SPACE_TYPES.forEach(t=>{ state[t.key] = []; resizeInstances(t.key); });
+  state.kitchenWall = { w:3600, h:600, tile:newTileCfg(300,600) };
+  state.wasteRate = 10;
+  render();
+}
+
+/* ============ Meta ============ */
+function bindMeta(){
+  document.querySelectorAll('[data-meta]').forEach(el=>{
+    el.value = state.meta[el.dataset.meta] || '';
+    el.addEventListener('input', e=>{ state.meta[e.target.dataset.meta] = e.target.value; });
+  });
+}
+
+/* ============ Print ============ */
+function buildPrintView(){
+  const t = computeTotals();
+  const today = new Date().toLocaleDateString('ko-KR');
+  let rows = '';
+  t.groups.forEach(g=>{
+    rows += '<tr class="p-cat-row"><td colspan="5">'+g.label+'</td></tr>';
+    g.items.forEach(it=>{
+      rows += '<tr><td>'+escapeHtml(it.name)+(it.note?' ('+escapeHtml(it.note)+')':'')+'</td><td class="p-right">'+it.tileSize+'</td><td class="p-right">'+it.area.toFixed(2)+'㎡</td><td class="p-right">'+it.tiles+'장</td><td class="p-right">'+it.boxes+'박스</td></tr>';
+    });
+  });
+  const html = ''+
+    '<div class="p-title">타 일 수 량 산 출 서</div>'+
+    '<div class="p-sub">DESIGN SANGSANG TILE QUANTITY</div>'+
+    '<div class="p-meta">'+
+      '<div><span>공급자</span> 디자인상상 (585-02-03690)</div>'+
+      '<div><span>산출일</span> '+today+'</div>'+
+      '<div><span>프로젝트/공사명</span> '+escapeHtml(state.meta.project||'-')+'</div>'+
+      '<div><span>고객명</span> '+escapeHtml(state.meta.customer||'-')+' 귀하</div>'+
+    '</div>'+
+    '<table class="p-table"><thead><tr><th>공간</th><th class="p-right">타일 규격</th><th class="p-right">면적</th><th class="p-right">수량(장)</th><th class="p-right">수량(박스)</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+    '<table class="p-totals"><tbody>'+
+      '<tr class="final"><td>총 타일 수량</td><td class="p-right">'+won(t.grandTiles)+' 장 · '+won(t.grandBoxes)+' 박스</td></tr>'+
+    '</tbody></table>'+
+    '<div class="p-note">* 로스율 '+state.wasteRate+'%를 반영한 수량이며, 박스 환산은 별도 표기가 없는 한 1.44㎡/박스 기준입니다.<br>* 실측 후 현장 여건에 따라 조정될 수 있습니다.</div>';
+  document.getElementById('printArea').innerHTML = html;
+  window.print();
+}
+
+/* ============ Init ============ */
+bindMeta();
+render();
+
+</script>
+</body>
+</html>

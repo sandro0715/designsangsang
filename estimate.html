@@ -1,0 +1,1286 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>디자인상상 · 인테리어 공사 견적 계산기</title>
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F4F1E8;
+  --surface:#FFFFFF;
+  --surface-2:#FBF9F3;
+  --ink:#221F19;
+  --ink-dim:#6E6656;
+  --ink-faint:#A79E8B;
+  --line:#E2DBC8;
+  --line-strong:#CFC5AA;
+  --accent:#7B5A34;
+  --accent-deep:#4E3A21;
+  --accent-soft:#EFE4CE;
+  --total-bg:#20301F;
+  --total-bg-2:#2C4429;
+  --total-ink:#F2EEDF;
+  --danger:#9C3B2E;
+  --option-tag:#3E5C6B;
+  --radius:10px;
+  --shadow:0 1px 2px rgba(34,31,25,.06), 0 6px 20px -8px rgba(34,31,25,.15);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:'Pretendard Variable','Pretendard',-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+  font-size:14px;
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+.num, .mono{
+  font-family:'JetBrains Mono','SFMono-Regular',ui-monospace,Menlo,Consolas,monospace;
+  font-variant-numeric:tabular-nums;
+}
+button{font-family:inherit;cursor:pointer;}
+input{font-family:inherit;}
+
+/* ===== App shell ===== */
+#app{display:flex; flex-direction:column; min-height:100vh;}
+
+.topbar{
+  background:var(--accent-deep);
+  color:var(--total-ink);
+  padding:18px 28px;
+  display:flex;
+  align-items:baseline;
+  gap:14px;
+  flex-wrap:wrap;
+  border-bottom:3px solid var(--accent);
+}
+.topbar .brand-mark{
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;
+  letter-spacing:.14em;
+  border:1px solid rgba(242,238,223,.4);
+  padding:3px 7px;
+  border-radius:4px;
+  opacity:.85;
+}
+.topbar h1{
+  font-size:19px;
+  font-weight:800;
+  margin:0;
+  letter-spacing:-.01em;
+}
+.topbar .sub{
+  font-size:12.5px;
+  color:rgba(242,238,223,.68);
+  margin-left:auto;
+}
+.mode-switch{
+  display:flex;
+  gap:4px;
+  background:rgba(0,0,0,.18);
+  padding:4px;
+  border-radius:9px;
+}
+.mode-btn{
+  border:none;
+  background:transparent;
+  color:rgba(242,238,223,.75);
+  font-size:12.5px;
+  font-weight:700;
+  padding:7px 14px;
+  border-radius:6px;
+}
+.mode-btn:hover{color:#fff;}
+.mode-btn.active{background:var(--accent); color:#fff;}
+
+/* ===== Admin (price & margin) table ===== */
+.margin-box{
+  background:var(--accent-soft);
+  border:1px solid var(--line-strong);
+  border-radius:var(--radius);
+  padding:12px 14px;
+  margin-bottom:14px;
+}
+.margin-box-label{font-size:12.5px; font-weight:700; color:var(--accent-deep); margin-bottom:8px;}
+.margin-box-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+.margin-cat-input{
+  width:74px; padding:6px 8px; border:1.4px solid var(--accent); border-radius:6px;
+  font-size:13.5px; font-weight:700; text-align:right; background:#fff;
+}
+.margin-box-hint{font-size:11px; color:var(--ink-dim); flex:1; min-width:180px;}
+.btn-reset-group{flex:none; padding:7px 12px; font-size:11.5px;}
+
+table.admin-table .col-cost{width:100px;}
+table.admin-table .col-margin{width:96px; text-align:right;}
+table.admin-table .col-final{width:110px; text-align:right; font-weight:700;}
+.cost-input{
+  width:88px; padding:5px 7px; border:1.3px solid var(--line-strong); border-radius:6px;
+  text-align:right; font-size:12.5px; background:#fff;
+}
+.cost-input:focus{outline:none; border-color:var(--accent);}
+.margin-input{width:52px;}
+.na{color:var(--ink-faint);}
+.final-price{color:var(--accent-deep); font-weight:800;}
+.name-input{
+  display:block; width:100%; border:none; border-bottom:1px solid var(--line);
+  background:transparent; font-size:13px; font-weight:600; padding:3px 2px; margin-bottom:3px;
+}
+.spec-input{
+  display:block; width:100%; border:none; background:transparent;
+  font-size:11.5px; color:var(--ink-dim); padding:2px 2px;
+}
+.name-input:focus, .spec-input:focus{outline:none; background:var(--accent-soft); border-radius:4px;}
+.unit-input{
+  width:56px; border:1.3px solid var(--line-strong); border-radius:6px;
+  padding:5px 6px; font-size:12px; text-align:center; background:#fff;
+}
+
+/* ===== Saved quotes view ===== */
+.save-box{
+  background:var(--surface-2);
+  border:1px solid var(--line-strong);
+  border-radius:var(--radius);
+  padding:16px;
+  margin-bottom:20px;
+}
+.save-box-title{font-size:13px; font-weight:700; color:var(--accent-deep); margin-bottom:10px;}
+.save-box-row{display:flex; gap:8px;}
+.save-box-row input{
+  flex:1; padding:9px 12px; border:1.4px solid var(--line-strong); border-radius:8px; font-size:13.5px;
+}
+.save-box-hint{font-size:11.5px; color:var(--ink-dim); margin-top:10px;}
+.saved-empty{
+  text-align:center; padding:40px 20px; color:var(--ink-faint); font-size:13px;
+  border:1px dashed var(--line-strong); border-radius:var(--radius);
+}
+.saved-list{display:flex; flex-direction:column; gap:8px;}
+.saved-item{
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+  padding:13px 16px;
+}
+.saved-item-name{font-size:14px; font-weight:700; color:var(--ink);}
+.saved-item-meta{font-size:11.5px; color:var(--ink-faint); margin-top:3px;}
+.saved-item-actions{display:flex; gap:6px; align-items:center; flex:none;}
+.btn-remove-snap{
+  border:1.3px solid var(--danger); color:var(--danger); background:transparent;
+  width:30px; height:30px; border-radius:7px; font-size:16px; line-height:1;
+}
+.btn-remove-snap:hover{background:rgba(156,59,46,.08);}
+
+.meta-bar{
+  background:var(--surface);
+  border-bottom:1px solid var(--line);
+  padding:14px 28px;
+  display:grid;
+  grid-template-columns:repeat(4,minmax(150px,1fr));
+  gap:14px 22px;
+}
+.meta-field label{
+  display:block;
+  font-size:10.5px;
+  letter-spacing:.06em;
+  color:var(--ink-faint);
+  text-transform:uppercase;
+  margin-bottom:4px;
+  font-weight:600;
+}
+.meta-field input{
+  width:100%;
+  border:none;
+  border-bottom:1.5px solid var(--line-strong);
+  background:transparent;
+  padding:3px 2px 6px;
+  font-size:14.5px;
+  color:var(--ink);
+  font-weight:600;
+}
+.meta-field input:focus{outline:none;border-bottom-color:var(--accent);}
+
+.layout{
+  flex:1;
+  display:grid;
+  grid-template-columns:236px 1fr 328px;
+  gap:0;
+  align-items:start;
+}
+
+/* ===== Left nav ===== */
+.nav{
+  position:sticky; top:0;
+  align-self:start;
+  padding:18px 12px 40px;
+  border-right:1px solid var(--line);
+  background:var(--surface-2);
+  height:100vh;
+  overflow-y:auto;
+}
+.nav-title{
+  font-size:10.5px;
+  letter-spacing:.1em;
+  color:var(--ink-faint);
+  text-transform:uppercase;
+  font-weight:700;
+  padding:4px 10px 10px;
+}
+.nav-item{
+  display:flex;
+  align-items:center;
+  gap:9px;
+  width:100%;
+  text-align:left;
+  padding:9px 10px;
+  border-radius:8px;
+  border:none;
+  background:transparent;
+  color:var(--ink-dim);
+  font-size:13px;
+  font-weight:600;
+  margin-bottom:2px;
+  transition:background .12s;
+}
+.nav-item:hover{background:var(--accent-soft);}
+.nav-item.active{background:var(--accent); color:#fff;}
+.nav-item .idx{
+  font-family:'JetBrains Mono',monospace;
+  font-size:10.5px;
+  width:26px; height:20px;
+  display:flex; align-items:center; justify-content:center;
+  border-radius:5px;
+  background:rgba(123,90,52,.12);
+  color:var(--accent-deep);
+  flex:none;
+  font-weight:700;
+}
+.nav-item.active .idx{background:rgba(255,255,255,.22); color:#fff;}
+.nav-item .cnt{
+  margin-left:auto;
+  font-family:'JetBrains Mono',monospace;
+  font-size:10.5px;
+  color:var(--ink-faint);
+}
+.nav-item.active .cnt{color:rgba(255,255,255,.85);}
+
+/* ===== Main panel ===== */
+.main{
+  padding:26px 30px 80px;
+  min-width:0;
+}
+.cat-head{
+  margin-bottom:18px;
+  padding-bottom:14px;
+  border-bottom:2px solid var(--ink);
+}
+.cat-head .eyebrow{
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;
+  letter-spacing:.1em;
+  color:var(--accent);
+  font-weight:700;
+}
+.cat-head h2{
+  font-size:23px;
+  margin:2px 0 0;
+  font-weight:800;
+  letter-spacing:-.01em;
+}
+.subgroup-title{
+  font-size:13px;
+  font-weight:700;
+  color:var(--accent-deep);
+  margin:22px 0 8px;
+  padding-left:2px;
+  border-left:3px solid var(--accent);
+  padding-left:9px;
+}
+.subgroup-title:first-of-type{margin-top:0;}
+
+table.items{
+  width:100%;
+  border-collapse:collapse;
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  overflow:hidden;
+  margin-bottom:8px;
+}
+table.items thead th{
+  background:var(--surface-2);
+  text-align:left;
+  font-size:11px;
+  font-weight:700;
+  color:var(--ink-faint);
+  text-transform:uppercase;
+  letter-spacing:.04em;
+  padding:9px 10px;
+  border-bottom:1px solid var(--line);
+}
+table.items td{
+  padding:8px 10px;
+  border-bottom:1px solid var(--line);
+  vertical-align:middle;
+}
+table.items tbody tr:last-child td{border-bottom:none;}
+table.items tbody tr:hover{background:#FCFAF4;}
+table.items tbody tr.has-qty{background:#FBF6E9;}
+table.items tbody tr.has-qty:hover{background:#F8F0DC;}
+.col-idx{width:34px; color:var(--ink-faint); font-size:11.5px;}
+.col-name{min-width:190px;}
+.item-name{font-weight:600; font-size:13.5px;}
+.item-spec{font-size:11.5px; color:var(--ink-faint); margin-top:1px;}
+.col-unit{width:44px; color:var(--ink-dim); font-size:12.5px; text-align:center;}
+.col-price{width:96px; text-align:right; font-size:12.5px; color:var(--ink-dim);}
+.col-opt{width:56px; text-align:center;}
+.col-qty{width:96px;}
+.col-amt{width:112px; text-align:right; font-weight:700; font-size:13px;}
+
+.qty-input{
+  width:78px;
+  padding:5px 7px;
+  border:1.3px solid var(--line-strong);
+  border-radius:6px;
+  text-align:right;
+  font-size:13px;
+  background:#fff;
+}
+.qty-input:focus{outline:none; border-color:var(--accent);}
+.opt-check{width:16px; height:16px; accent-color:var(--option-tag); cursor:pointer;}
+
+.cat-subtotal{
+  display:flex;
+  justify-content:flex-end;
+  gap:22px;
+  padding:10px 4px 26px;
+  font-size:12.5px;
+  color:var(--ink-dim);
+}
+.cat-subtotal b{color:var(--ink); font-family:'JetBrains Mono',monospace;}
+
+/* custom item row */
+.custom-add{
+  margin-top:8px;
+  padding:12px;
+  background:var(--surface-2);
+  border:1px dashed var(--line-strong);
+  border-radius:var(--radius);
+}
+.custom-add-title{font-size:11.5px; font-weight:700; color:var(--ink-faint); margin-bottom:8px; text-transform:uppercase; letter-spacing:.04em;}
+.custom-add-grid{display:grid; grid-template-columns:1.6fr .9fr .8fr .9fr auto; gap:8px; align-items:center;}
+.custom-add-grid input{
+  padding:7px 9px;
+  border:1.3px solid var(--line-strong);
+  border-radius:6px;
+  font-size:12.5px;
+  width:100%;
+}
+.btn-add{
+  background:var(--accent);
+  color:#fff;
+  border:none;
+  padding:8px 14px;
+  border-radius:6px;
+  font-size:12.5px;
+  font-weight:700;
+  white-space:nowrap;
+}
+.btn-add:hover{background:var(--accent-deep);}
+.custom-row td{background:#FEFCF6;}
+.btn-remove{
+  border:none; background:transparent; color:var(--danger);
+  font-size:16px; line-height:1; padding:2px 6px; border-radius:4px;
+}
+.btn-remove:hover{background:rgba(156,59,46,.1);}
+
+/* ===== Summary panel ===== */
+.summary{
+  position:sticky; top:0;
+  height:100vh;
+  overflow-y:auto;
+  border-left:1px solid var(--line);
+  background:var(--surface);
+  padding:22px 20px 30px;
+}
+.summary-title{
+  font-size:11px; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--ink-faint); font-weight:700; margin-bottom:14px;
+}
+.summary-list{list-style:none; margin:0 0 14px; padding:0;}
+.summary-list li{
+  display:flex; justify-content:space-between; align-items:baseline;
+  padding:7px 0; font-size:12.5px; color:var(--ink-dim);
+  border-bottom:1px dashed var(--line);
+}
+.summary-list li .amt{font-family:'JetBrains Mono',monospace; color:var(--ink); font-weight:600;}
+.summary-list li.indent{padding-left:10px; font-size:12px; color:var(--ink-faint);}
+.summary-list li.strong{font-weight:700; color:var(--ink);}
+.summary-list li.strong .amt{font-size:13.5px;}
+
+.total-card{
+  margin-top:16px;
+  background:linear-gradient(155deg,var(--total-bg),var(--total-bg-2));
+  color:var(--total-ink);
+  border-radius:12px;
+  padding:18px 18px 20px;
+}
+.total-card .label{
+  font-size:11px; letter-spacing:.1em; text-transform:uppercase;
+  opacity:.72; font-weight:700; margin-bottom:6px;
+}
+.total-card .value{
+  font-family:'JetBrains Mono',monospace;
+  font-size:27px;
+  font-weight:800;
+  letter-spacing:-.01em;
+}
+.total-card .vat-note{font-size:11px; opacity:.6; margin-top:6px;}
+
+.by-cat{margin-top:18px;}
+.by-cat-title{font-size:11px; color:var(--ink-faint); font-weight:700; margin-bottom:8px; text-transform:uppercase; letter-spacing:.06em;}
+.by-cat-row{
+  display:flex; justify-content:space-between; font-size:11.5px;
+  padding:5px 0; color:var(--ink-dim); cursor:pointer;
+}
+.by-cat-row:hover{color:var(--accent-deep);}
+.by-cat-row .amt{font-family:'JetBrains Mono',monospace;}
+.by-cat-row.zero{opacity:.4;}
+
+.action-row{display:flex; gap:8px; margin-top:18px;}
+.btn-secondary{
+  flex:1;
+  background:var(--surface-2);
+  border:1.3px solid var(--line-strong);
+  color:var(--ink);
+  padding:10px 8px;
+  border-radius:8px;
+  font-size:12.5px;
+  font-weight:700;
+}
+.btn-secondary:hover{background:var(--accent-soft); border-color:var(--accent);}
+.btn-primary{
+  flex:1;
+  background:var(--ink);
+  color:#fff;
+  border:none;
+  padding:10px 8px;
+  border-radius:8px;
+  font-size:12.5px;
+  font-weight:700;
+}
+.btn-primary:hover{background:var(--accent-deep);}
+
+.footnote{
+  margin-top:16px;
+  font-size:10.8px;
+  color:var(--ink-faint);
+  line-height:1.55;
+  border-top:1px solid var(--line);
+  padding-top:12px;
+}
+
+/* ===== Print view ===== */
+#printArea{display:none;}
+@media print{
+  body *{visibility:hidden;}
+  #printArea, #printArea *{visibility:visible;}
+  #printArea{display:block; position:absolute; top:0; left:0; width:100%; padding:24px; font-size:12px;}
+  .p-title{font-size:20px; font-weight:800; text-align:center; letter-spacing:.3em; margin-bottom:4px;}
+  .p-sub{text-align:center; font-size:10px; color:#666; margin-bottom:18px;}
+  .p-meta{display:grid; grid-template-columns:1fr 1fr; gap:6px 24px; font-size:11px; margin-bottom:16px; border:1px solid #999; padding:10px 14px; border-radius:6px;}
+  .p-meta div span{color:#666;}
+  table.p-table{width:100%; border-collapse:collapse; margin-bottom:4px;}
+  table.p-table th, table.p-table td{border:1px solid #ccc; padding:5px 7px; font-size:11px;}
+  table.p-table th{background:#eee;}
+  .p-cat-row td{background:#f7f5ee; font-weight:700;}
+  .p-right{text-align:right;}
+  .p-totals{width:320px; margin-left:auto; margin-top:12px; border-collapse:collapse;}
+  .p-totals td{padding:5px 8px; font-size:11.5px; border-bottom:1px solid #ddd;}
+  .p-totals tr.final td{font-weight:800; font-size:14px; border-top:2px solid #222; border-bottom:none;}
+  .p-note{margin-top:18px; font-size:10px; color:#777; line-height:1.6;}
+}
+
+/* ===== Responsive ===== */
+@media (max-width:1180px){
+  .layout{grid-template-columns:200px 1fr;}
+  .summary{position:static; height:auto; border-left:none; border-top:1px solid var(--line);}
+}
+@media (max-width:820px){
+  .layout{grid-template-columns:1fr;}
+  .nav{position:static; height:auto; border-right:none; border-bottom:1px solid var(--line);}
+  .nav-list{display:flex; flex-wrap:wrap; gap:6px;}
+  .nav-item{width:auto;}
+  .meta-bar{grid-template-columns:1fr 1fr;}
+  .custom-add-grid{grid-template-columns:1fr 1fr;}
+}
+
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <span class="brand-mark">DESIGN SANGSANG</span>
+    <h1>인테리어 공사 견적 계산기</h1>
+    <div class="mode-switch">
+      <button class="mode-btn" data-mode-btn="quote">견적 작성</button>
+      <button class="mode-btn" data-mode-btn="admin">단가·마진 관리</button>
+      <button class="mode-btn" data-mode-btn="saved">저장된 견적</button>
+    </div>
+    <span class="sub">디자인상상 · 실내 인테리어 공사 견적서 v2608</span>
+  </header>
+
+  <div class="meta-bar">
+    <div class="meta-field">
+      <label>프로젝트 / 공사명</label>
+      <input type="text" data-meta="project" placeholder="예: OO아파트 34평 리모델링">
+    </div>
+    <div class="meta-field">
+      <label>고객명</label>
+      <input type="text" data-meta="customer" placeholder="고객님 성함">
+    </div>
+    <div class="meta-field">
+      <label>견적일</label>
+      <input type="date" data-meta="date">
+    </div>
+    <div class="meta-field">
+      <label>담당자</label>
+      <input type="text" value="윤상돈 실장" disabled style="color:var(--ink-faint);">
+    </div>
+  </div>
+
+  <div class="layout">
+    <nav class="nav">
+      <div class="nav-title">공종 목록</div>
+      <div class="nav-list" id="nav-list"></div>
+    </nav>
+
+    <main class="main" id="main-content"></main>
+
+    <aside class="summary" id="summary-content"></aside>
+  </div>
+</div>
+
+<div id="printArea"></div>
+
+<script>
+/* ============ Data ============ */
+const CATALOG = {"1":{"label":"철거 및 설비","margin":0.3,"items":[{"n":"폐기물 처리 비용","s":"건축 폐기물 (혼합)","u":"TON","exp":350000,"ep":-3},{"n":"전체 몰딩류 기본 철거","s":"전체 몰딩 / 걸레받이 / 장판","u":"㎡","labor":900,"lp":-3},{"n":"주방 철거","s":"주방 상/하부장","u":"m","labor":20000,"lp":-3},{"n":"주방 타일 철거","s":"상하부 중간타일 / 1겹기준","u":"m","labor":20000,"lp":-3},{"n":"기타 수납장 철거","s":"현관장/붙박이장","u":"자","labor":10000,"lp":-3},{"n":"문 및 문틀 세트 철거","s":"일반 방 도어/싯기부 미장 포함","u":"EA","labor":40000,"lp":-3},{"n":"중문 철거 (문짝1개)","s":"문짝/문틀/임방 포함","u":"EA","labor":100000,"lp":-3},{"n":"중문철거 (연동/슬라이딩)","s":"문짝/문틀/임방 포함","u":"EA","labor":160000,"lp":-3},{"n":"분합창 철거","s":"확장부 샷시 선철거","u":"개소","labor":150000,"lp":-3},{"n":"날개벽 철거 (조적/경량블럭)","s":"두께 200mm/길이50cm 미만","u":"개소","labor":200000,"lp":-3},{"n":"가벽 철거 (조적) / 1겹","s":"조적벽 / 두께 150 미만","u":"m","labor":200000,"lp":-3},{"n":"가벽 철거 (조적) / 2겹","s":"조적벽 / 두께 150 초과","u":"m","labor":400000,"lp":-3},{"n":"가벽 철거 (경량철골)","s":"-","u":"m","labor":150000,"lp":-3},{"n":"가벽 철거 (석고&목재)","s":"-","u":"m","labor":70000,"lp":-3},{"n":"옹벽 철거 (d<160)","s":"두께 160미만","u":"㎡","labor":300000,"lp":-3},{"n":"옹벽 철거 (d>160)","s":"두께 160초과","u":"㎡","labor":450000,"lp":-3},{"n":"화단 철거 (옹벽)","s":"3m 미만  / 초과 시 추가","u":"식","labor":400000,"lp":-3},{"n":"화단 철거 (크래셔)","s":"3.5m 미만  / 초과 시 추가","u":"식","labor":600000,"lp":-3},{"n":"천장 철거 (석고,목재)","s":"-","u":"㎡","labor":19000,"lp":-3},{"n":"현관 바닥타일 철거","s":"","u":"㎡","labor":100000,"lp":-3},{"n":"발코니 바닥타일 철거","s":"타일만 (1겹 기준)","u":"㎡","labor":15000,"lp":-3},{"n":"거실 확장","s":"3.2m 미만 / 초과 시 추가","u":"식","mat":100000,"mp":-2,"labor":650000,"lp":-3},{"n":"방 확장","s":"2.4m 미만 / 초과 시 추가","u":"식","mat":100000,"mp":-2,"labor":500000,"lp":-3},{"n":"에어컨 배관 先매립작업","s":"동관 및 전기배선 / 5m 미만","u":"개소","mat":120000,"mp":-2,"labor":100000,"lp":-3},{"n":"싱크대 수도 내림","s":"옹벽 및 강관 시 추가","u":"식","mat":20000,"mp":-2,"labor":60000,"lp":-3},{"n":"분배기 이동","s":"기존 분배기 재사용/ 분배기 비용 별도","u":"구당","labor":180000,"lp":-3},{"n":"분배기 교체","s":"6구 미만 / 스텐분배기","u":"식","mat":150000,"mp":-2,"labor":450000,"lp":-3},{"n":"단열벽 철거","s":"2300, 4m 미만","u":"면","labor":200000,"lp":-3},{"n":"기타 잡철거 외","s":"잡철거/잡폐기물 외","u":"식","labor":250000,"lp":-3},{"n":"승강기보양","s":"전체 보양","u":"식","mat":60000,"mp":-2,"labor":80000,"lp":-3},{"n":"동선 보양","s":"1800*900 / 폴리베니아","u":"EA","labor":9000,"lp":-3},{"n":"세대 내 보양","s":"1800*900 / 폴리베니아","u":"㎡","labor":4000,"lp":-3},{"n":"승강기 보양","s":"전체 보양","u":"식","mat":80000,"mp":-2,"labor":40000,"lp":-3},{"n":"매립 수전","s":"사전 벽 매립 / 조적비용 별도","u":"개소","mat":50000,"mp":-2,"labor":300000,"lp":-3},{"n":"욕조 수도 올림","s":"조적벽 기준","u":"개소","mat":40000,"mp":-2,"labor":140000,"lp":-3},{"n":"라디에이터 철거","s":"-","u":"EA","labor":100000,"lp":-3},{"n":"전체 장판 철거","s":"-","u":"식","labor":100000,"lp":-3},{"n":"바닥재 철거 (강/온돌마루)","s":"샌딩 포함","u":"㎡","labor":7575,"lp":-3},{"n":"바닥재 철거 (데코타일)","s":"샌딩 포함","u":"㎡","labor":6060,"lp":-3},{"n":"바닥재 철거 (강화마루)","s":"샌딩 비용 별도","u":"㎡","labor":3030,"lp":-3},{"n":"바닥재 철거 (대리석)","s":"샌딩 비용 별도","u":"㎡","labor":28787,"lp":-3},{"n":"바닥재 철거 (포세린타일 외)","s":"샌딩 비용 별도","u":"㎡","labor":24242,"lp":-3},{"n":"바닥재 철거 (SB마루)","s":"-","u":"㎡","labor":16666,"lp":-3},{"n":"바닥 샌딩 작업","s":"-","u":"㎡","labor":6060,"lp":-3},{"n":"바닥샌딩 추가비용","s":"철거 후 장판/에디톤 시공","u":"㎡","labor":1515,"lp":-3},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""}]},"2":{"label":"창호 및 금속류","margin":0.0,"items":[{"n":"LX 지인 하우시스 베스트 5 - 발코니 단창","s":"자재+시공 단가(㎡)","u":"㎡","mat":21500,"mp":-2},{"n":"LX 지인 하우시스 베스트 5 - 발코니 이중창","s":"자재+시공 단가(㎡)","u":"㎡","mat":31500,"mp":-2},{"n":"LX 지인 하우시스 베스트 5 - 분합 단창","s":"자재+시공 단가(㎡)","u":"㎡","mat":21500,"mp":-2},{"n":"LX 지인 하우시스 베스트 5 - 분합 이중창","s":"자재+시공 단가(㎡)","u":"㎡","mat":31500,"mp":-2},{"n":"KCC 26t (외창 LOW-E) - 발코니 단창","s":"자재+시공 단가(㎡)","u":"㎡","mat":11300,"mp":-2},{"n":"KCC 26t (외창 LOW-E) - 발코니 이중창","s":"자재+시공 단가(㎡)","u":"㎡","mat":19800,"mp":-2},{"n":"KCC 26t (외창 LOW-E) - 분합 단창","s":"자재+시공 단가(㎡)","u":"㎡","mat":11300,"mp":-2},{"n":"KCC 26t (외창 LOW-E) - 분합 이중창","s":"자재+시공 단가(㎡)","u":"㎡","mat":19800,"mp":-2},{"n":"터닝도어","s":"제작 사이즈","u":"EA","mat":390000,"mp":-2},{"n":"통바","s":"기본","u":"EA","mat":25000,"mp":-2},{"n":"기타부자재","s":"실리콘 외","u":"set","mat":40000,"mp":-2},{"n":"샷시 전체 철거","s":"전체 샷시 철거","u":"식","labor":250000,"lp":-3,"exp":20000,"ep":-3},{"n":"샷시 부분 철거","s":"개소당","u":"EA","labor":50000,"lp":-3},{"n":"양중비용 (렌치)","s":"-","u":"식","exp":250000,"ep":-3,"mo":0.0},{"n":"배송비","s":"-","u":"식","exp":80000,"ep":-3,"mo":0.0},{"n":"시공비 및 부자재","s":"샷시 시공/기본실리콘","u":"자평","labor":4200,"lp":-2,"mo":0.15},{"n":"추가인건비","s":"-","u":"인","labor":350000,"lp":-3,"mo":0.0},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""}]},"3":{"label":"목공사 및 도어류","margin":0.25,"items":[{"n":"천장 몰딩 시공","s":"15*25*2440,9t","u":"EA","mat":2600,"mp":-2,"labor":9000,"lp":-3},{"n":"걸레받이 시공","s":"30*2440*9t","u":"EA","mat":3600,"mp":-2,"labor":4000,"lp":-3},{"n":"문틀 및 문선 리폼","s":"MDF 9t/12t","u":"식","mat":16000,"mp":-2,"labor":40000,"lp":-3},{"n":"방문 교체 시공","s":"ABS/평판민무늬","u":"EA","mat":95000,"mp":-2,"labor":32000,"lp":-3},{"n":"방문 철물 부속","s":"손잡이/경첩(기본형)","u":"EA","mat":45000,"mp":-2,"labor":13000,"lp":-3},{"n":"문 및 문틀 SET 시공","s":"ABS/평판민무늬/문선","u":"EA","mat":235000,"mp":-2,"labor":80000,"lp":-3},{"n":"슬라이딩 도어 노출레일","s":"평판민무늬/문틀 별도","u":"EA","mat":240000,"mp":-2,"labor":76000,"lp":-3},{"n":"슬라이딩 도어 매립레일","s":"평판민무늬/문틀 별도","u":"EA","mat":160000,"mp":-2,"labor":220000,"lp":-3},{"n":"문틀 시공","s":"기본","u":"EA","mat":140000,"mp":-2,"labor":52000,"lp":-3},{"n":"슬림 문선 문틀 시공","s":"9t / 기성품","u":"EA","mat":140000,"mp":-2,"labor":52000,"lp":-3},{"n":"슬림 문선 문틀 시공 (현장제작)","s":"9t / 필름마감필요","u":"EA","mat":76000,"mp":-2,"labor":98000,"lp":-3},{"n":"천장 시공(각목+석고마감)","s":"-","u":"㎡","mat":9500,"mp":-2,"labor":28500,"lp":-3},{"n":"우물 천장 평판화작업","s":"우물 사이즈 기준","u":"㎡","mat":9500,"mp":-2,"labor":41000,"lp":-3},{"n":"우물 천장 신설","s":"공간 사이즈 기준","u":"㎡","mat":11500,"mp":-2,"labor":33500,"lp":-3},{"n":"간접 조명 작업 (매립형)","s":"-","u":"m","mat":17500,"mp":-2,"labor":68000,"lp":-3},{"n":"간접 조명 작업 (노출박스)","s":"깊이 600 미만","u":"m","mat":21500,"mp":-2,"labor":48000,"lp":-3},{"n":"거실 TV 콘솔 벽체 및 보강작업","s":"천고 2400 미만","u":"m","mat":25000,"mp":-2,"labor":76000,"lp":-3},{"n":"벽체 석고 마감","s":"천고 2400 미만","u":"m","mat":18000,"mp":-2,"labor":32000,"lp":-3},{"n":"가벽 시공 (양면)","s":"천고 2400 미만","u":"m","mat":33000,"mp":-2,"labor":152000,"lp":-3},{"n":"가벽 시공 (단면)","s":"천고 2400 미만","u":"m","mat":19500,"mp":-2,"labor":72000,"lp":-3},{"n":"벽체 단열 (e보드)","s":"-","u":"㎡","mat":19000,"mp":-2,"labor":32000,"lp":-3},{"n":"벽체 단열 (단열+방수석고)","s":"PF보드","u":"㎡","mat":44500,"mp":-2,"labor":49000,"lp":-3},{"n":"디자인 벽체 시공","s":"천고 2400 미만","u":"m","mat":75000,"mp":-2,"labor":78000,"lp":-3},{"n":"벽체 시공 합판+석고마감","s":"천고 2400 미만","u":"m","mat":113000,"mp":-2,"labor":91000,"lp":-3},{"n":"폴딩도어 틀 작업","s":"w:3500미만","u":"식","mat":84000,"mp":-2,"labor":152000,"lp":-3},{"n":"시스템 에어컨 공조기 틀작업","s":"-","u":"EA","mat":10500,"mp":-2,"labor":49000,"lp":-3},{"n":"발코니 외벽 및 천장 단열","s":"열반사단열제/합판상작업/방수석고","u":"㎡","mat":24500,"mp":-2,"labor":49500,"lp":-3},{"n":"공틀장 틀 작업","s":"문틀 생성 및 마감","u":"식","mat":43000,"mp":-2,"labor":126000,"lp":-3},{"n":"골틀장 선반 작업","s":"합판 및 내부 보강","u":"EA","mat":33000,"mp":-2,"labor":68000,"lp":-3},{"n":"방문 교체 디자인도어","s":"ABS / Design 도어","u":"EA","mat":190000,"mp":-2,"labor":36000,"lp":-3},{"n":"슬라이딩 도어 YFA도어","s":"영림 YFA 도어","u":"EA","mat":450000,"mp":-2,"labor":19500,"lp":-3},{"n":"방문 철물 부속 (고급형)","s":"손잡이/경첩","u":"EA","mat":65000,"mp":-2,"labor":12000,"lp":-3},{"n":"식대 및 기타비용","s":"숙박 및 식대","u":"일","exp":90000,"ep":-3},{"n":"자재 배송 및 양중","s":"-","u":"식","labor":80000,"lp":-3,"exp":60000,"ep":-3},{"n":"기타 마감","s":"별도 기재","u":"식","mat":150000,"mp":-2,"labor":350000,"lp":-3,"exp":10000,"ep":-3},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""}]},"4":{"label":"타일 공사","margin":0.25,"items":[{"n":"벽 타일 (세라믹)","s":"주방 / 아트월","u":"㎡","mat":20000,"mp":-2,"labor":33500,"lp":-3,"exp":3500,"ep":-3},{"n":"벽 타일 (포세린)","s":"주방 / 아트월","u":"㎡","mat":30000,"mp":-2,"labor":43500,"lp":-3,"exp":9200,"ep":-3},{"n":"벽 타일 (모자이크)","s":"주방 / 아트월","u":"㎡","mat":40000,"mp":-2,"labor":48500,"lp":-3,"exp":3500,"ep":-3},{"n":"기본형 벽타일 (세라믹)","s":"300*600","u":"㎡","mat":20000,"mp":-2,"labor":22500,"lp":-3,"exp":3500,"ep":-3},{"n":"기본형 벽타일 (포세린)","s":"600*600","u":"㎡","mat":30000,"mp":-2,"labor":29000,"lp":-3,"exp":9200,"ep":-3},{"n":"고급 벽타일 (수입)","s":"상담 후 변동 가능","u":"㎡","mat":50000,"mp":-2,"labor":29000,"lp":-3,"exp":9200,"ep":-3},{"n":"벽타일 (중상급/포세린)","s":"상담 후 변동 가능","u":"㎡","mat":35000,"mp":-2,"labor":29000,"lp":-3,"exp":9200,"ep":-3},{"n":"벽타일 / 레그노 REP 시리즈","s":"모자이크 타일","u":"㎡","mat":40000,"mp":-2,"labor":36500,"lp":-3,"exp":3500,"ep":-3},{"n":"발코니 바닥타일 (세라믹)","s":"300*300 기본형","u":"㎡","mat":20000,"mp":-2,"labor":66500,"lp":-3,"exp":2500,"ep":-3},{"n":"발코니 바닥타일 (포세린)","s":"600*600 기본형","u":"㎡","mat":30000,"mp":-2,"labor":66500,"lp":-3,"exp":2500,"ep":-3},{"n":"욕실 바닥타일 (세라믹)","s":"300*300 기본형","u":"㎡","mat":20000,"mp":-2,"labor":65000,"lp":-3,"exp":2500,"ep":-3},{"n":"욕실 바닥타일 (포세린)","s":"600*600","u":"㎡","mat":30000,"mp":-2,"labor":75000,"lp":-3,"exp":2500,"ep":-3},{"n":"거실 및 주방 바닥타일","s":"600*600","u":"㎡","mat":30000,"mp":-2,"labor":32000,"lp":-3,"exp":2500,"ep":-3},{"n":"거실 및 주방 바닥타일","s":"450*900","u":"㎡","mat":45000,"mp":-2,"labor":32000,"lp":-3,"exp":2500,"ep":-3},{"n":"현관 바닥타일 (포세린)","s":"600*600 기본","u":"식","mat":68000,"mp":-2,"labor":99000,"lp":-3},{"n":"걸레받이 타일 시공","s":"h:300 미만","u":"m","mat":12500,"mp":-2,"labor":19500,"lp":-3},{"n":"바닥 돋움 / 바닥 미장","s":"높이 10cm당","u":"㎡","mat":6000,"mp":-2,"labor":10500,"lp":-3},{"n":"석재용 에폭시","s":"주재/경화재 mix용","u":"set","mat":65000,"mp":-2},{"n":"레미탈 일반 미장용","s":"40kg","u":"포","mat":8000,"mp":-2},{"n":"레미탈 떠붙임용","s":"40kg","u":"포","mat":6500,"mp":-2},{"n":"조적용 벽돌","s":"190*90*57t","u":"pcs","mat":200,"mp":-2},{"n":"압착 시멘트","s":"25kg","u":"포","mat":6000,"mp":-2},{"n":"세라픽스","s":"20kg","u":"말","mat":20000,"mp":-2},{"n":"기타 부자재","s":"줄눈용 매지/마감재 외","u":"식","mat":165000,"mp":-2,"mo":0.2},{"n":"아덱스 줄눈","s":"2kg","u":"EA","mat":7000,"mp":-2},{"n":"아덱스 실리콘","s":"-","u":"EA","mat":8000,"mp":-2},{"n":"기타 부대비용","s":"숙식 제공","u":"일","exp":75000,"ep":-3},{"n":"기공 추가","s":"기공","u":"인","labor":350000,"lp":-3,"exp":20000,"ep":-3},{"n":"조공 추가","s":"조공","u":"인","labor":200000,"lp":-3,"exp":10000,"ep":-3},{"n":"배송비","s":"1톤트럭","u":"대","exp":80000,"ep":-3,"mo":0.0},{"n":"양중비","s":"-","u":"인","exp":200000,"ep":-3,"mo":0.1},{"n":"자재 업그레이드","s":"추가금","u":"-","mat":600000,"mp":-2,"mo":0.0},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""}]},"5a":{"label":"욕실 공사 - 공용 욕실","margin":0.25,"items":[{"n":"천장재 시공","s":"기본 평판형 (점검구+사이드판)","u":"식","mat":150000,"mp":-2,"labor":160000,"lp":-3},{"n":"천장재 사이드판 추가","s":"-","u":"EA","mat":45000,"mp":-2},{"n":"욕실 환풍기","s":"힘펠 C2-100LF","u":"EA","mat":37000,"mp":-2},{"n":"양변기 도기 set","s":"대림 / 치마형","u":"EA","mat":250000,"mp":-2},{"n":"세면기 도기 set","s":"대림 / 반다리 기본형","u":"EA","mat":170000,"mp":-2},{"n":"세면 수전","s":"대림 / 기본","u":"EA","mat":100000,"mp":-2},{"n":"샤워 수전","s":"대림 / 기본 / 바포함","u":"EA","mat":200000,"mp":-2},{"n":"레인샤워 수전","s":"대림 / 기본형","u":"EA","mat":280000,"mp":-2},{"n":"욕실 상부장","s":"1200 슬라이딩 (히든)","u":"EA","mat":150000,"mp":-2},{"n":"욕실 거울","s":"AL 슬림 800*800","u":"EA","mat":65000,"mp":-2},{"n":"욕실 하부장","s":"600 size 기준 / 기본상판","u":"SET","mat":450000,"mp":-2},{"n":"욕조","s":"일반형 실키욕조","u":"EA","mat":145000,"mp":-2,"labor":80000,"lp":-3},{"n":"욕조 에이프런","s":"일반형 실키욕조 판넬","u":"EA","mat":50000,"mp":-2},{"n":"욕조 에이프런","s":"조적 및 타일 마감","u":"식","mat":45000,"mp":-2,"labor":80000,"lp":-3},{"n":"욕조 (오닉스)","s":"디자인 및 사이즈에 따라 변동","u":"EA","mat":350000,"mp":-2},{"n":"욕조 조적 작업","s":"조적용 벽돌 / 방수작업 포함","u":"식","mat":160000,"mp":-2,"labor":260000,"lp":-3},{"n":"욕실 파티션","s":"강화유리 파티션(투명)","u":"SET","mat":120000,"mp":-2},{"n":"조적 파티션 (상부 유리)","s":"하부 조적 / 상부 강화유리","u":"식","mat":130000,"mp":-2,"labor":65000,"lp":-3},{"n":"조적 파티션","s":"바닥to천장 / 추가디자인","u":"식","mat":65000,"mp":-2,"labor":210000,"lp":-3},{"n":"샤워 부스","s":"PCS당","u":"PCS","mat":250000,"mp":-2,"labor":50000,"lp":-3,"exp":30000,"ep":-3},{"n":"청소용 스프레이 건","s":"기본형","u":"set","mat":20000,"mp":-2},{"n":"젠다이 상판 (1500미만)","s":"천연대리석","u":"EA","mat":80000,"mp":-2},{"n":"젠다이 상판 (size주문제작)","s":"천연대리석","u":"EA","mat":120000,"mp":-2},{"n":"기본 ACC SET","s":"수건걸이/휴지걸이","u":"SET","mat":100000,"mp":-2},{"n":"코너 선반","s":"기본형","u":"EA","mat":40000,"mp":-2},{"n":"수건 선반","s":"욕조 상단 벽","u":"EA","mat":45000,"mp":-2},{"n":"조적 젠다이 작업","s":"변기/세면대 상단","u":"식","mat":40000,"mp":-2,"labor":100000,"lp":-3},{"n":"바닥>벽 배수 이설","s":"기존 line 유지","u":"식","mat":10000,"mp":-2,"labor":60000,"lp":-3},{"n":"수도 이설","s":"변동 가능","u":"식","mat":35000,"mp":-2,"labor":60000,"lp":-3},{"n":"욕실 기본철거","s":"천장 및 도기집기류","u":"식","labor":250000,"lp":-3,"exp":10000,"ep":-3},{"n":"욕실 바닥 철거 추가","s":"1,2차 방수 작업 포함","u":"식","mat":60000,"mp":-2,"labor":120000,"lp":-3},{"n":"욕실 벽 타일 철거 (1면당)","s":"타일 떠붙임 추가비용 포함","u":"식","labor":80000,"lp":-3},{"n":"욕실 전체 철거","s":"벽/바닥/천장 철거, 방수포함","u":"식","mat":60000,"mp":-2,"labor":650000,"lp":-3},{"n":"UBR 욕실 철거","s":"전체 철거 및 설비 추가","u":"식","mat":150000,"mp":-2,"labor":1450000,"lp":-3,"mo":0.1},{"n":"라디에이터 철거","s":"기본 소형","u":"EA","mat":20000,"mp":-2,"labor":90000,"lp":-3},{"n":"안전손잡이바","s":"-","u":"EA","mat":30000,"mp":-2,"labor":15000,"lp":-3},{"n":"도기 세팅 비용","s":"일반 타일","u":"식","mat":250000,"mp":-2,"exp":10000,"ep":-3,"mo":0.1},{"n":"도기 세팅 비용 (포세린)","s":"포세린 타일","u":"식","mat":350000,"mp":-2,"exp":10000,"ep":-3,"mo":0.1},{"n":"도기류 운임 및 양중","s":"-","u":"식","mat":140000,"mp":-2},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""}]},"5b":{"label":"욕실 공사 - 부부(안방) 욕실","margin":0.25,"items":[{"n":"천장재 시공","s":"기본 평판형 (점검구+사이드판)","u":"식","mat":150000,"mp":-2,"labor":160000,"lp":-3},{"n":"천장재 사이드판 추가","s":"-","u":"EA","mat":45000,"mp":-2},{"n":"욕실 환풍기","s":"힘펠 C2-100LF","u":"EA","mat":37000,"mp":-2},{"n":"양변기 도기 set","s":"대림 / 치마형","u":"EA","mat":250000,"mp":-2},{"n":"세면기 도기 set","s":"대림 / 반다리 기본형","u":"EA","mat":170000,"mp":-2},{"n":"세면 수전","s":"대림 / 기본","u":"EA","mat":100000,"mp":-2},{"n":"샤워 수전","s":"대림 / 기본 / 바포함","u":"EA","mat":200000,"mp":-2},{"n":"레인샤워 수전","s":"대림 / 기본형","u":"EA","mat":280000,"mp":-2},{"n":"욕실 상부장","s":"1200 슬라이딩 (히든)","u":"EA","mat":150000,"mp":-2},{"n":"욕실 거울","s":"AL 슬림 800*800","u":"EA","mat":65000,"mp":-2},{"n":"욕실 하부장","s":"600 size 기준 / 기본상판","u":"SET","mat":450000,"mp":-2},{"n":"욕조","s":"일반형 실키욕조","u":"EA","mat":145000,"mp":-2,"labor":80000,"lp":-3},{"n":"욕조 에이프런","s":"일반형 실키욕조 판넬","u":"EA","mat":50000,"mp":-2},{"n":"욕조 에이프런","s":"조적 및 타일 마감","u":"식","mat":45000,"mp":-2,"labor":80000,"lp":-3},{"n":"욕조 (오닉스)","s":"디자인 및 사이즈에 따라 변동","u":"EA","mat":350000,"mp":-2},{"n":"욕조 조적 작업","s":"조적용 벽돌 / 방수작업 포함","u":"식","mat":160000,"mp":-2,"labor":260000,"lp":-3},{"n":"욕실 파티션","s":"강화유리 파티션(투명)","u":"SET","mat":120000,"mp":-2},{"n":"조적 파티션 (상부 유리)","s":"하부 조적 / 상부 강화유리","u":"식","mat":130000,"mp":-2,"labor":65000,"lp":-3},{"n":"조적 파티션","s":"바닥to천장 / 추가디자인","u":"식","mat":65000,"mp":-2,"labor":210000,"lp":-3},{"n":"샤워 부스","s":"PCS당","u":"PCS","mat":250000,"mp":-2,"labor":50000,"lp":-3,"exp":30000,"ep":-3},{"n":"청소용 스프레이 건","s":"기본형","u":"set","mat":20000,"mp":-2},{"n":"젠다이 상판 (1500미만)","s":"천연대리석","u":"EA","mat":80000,"mp":-2},{"n":"젠다이 상판 (size주문제작)","s":"천연대리석","u":"EA","mat":120000,"mp":-2},{"n":"기본 ACC SET","s":"수건걸이/휴지걸이","u":"SET","mat":100000,"mp":-2},{"n":"코너 선반","s":"니켈 기본형","u":"EA","mat":40000,"mp":-2},{"n":"수건 선반","s":"욕조 상단 벽","u":"EA","mat":45000,"mp":-2},{"n":"조적 젠다이 작업","s":"변기/세면대 상단","u":"식","mat":40000,"mp":-2,"labor":100000,"lp":-3},{"n":"바닥>벽 배수 이설","s":"기존 line 유지","u":"식","mat":10000,"mp":-2,"labor":60000,"lp":-3},{"n":"수도 이설","s":"변동 가능","u":"식","mat":35000,"mp":-2,"labor":60000,"lp":-3},{"n":"욕실 기본철거","s":"천장 및 도기집기류","u":"식","labor":250000,"lp":-3,"exp":10000,"ep":-3},{"n":"욕실 바닥 철거 추가","s":"1,2차 방수 작업 포함","u":"식","mat":60000,"mp":-2,"labor":120000,"lp":-3},{"n":"욕실 벽 타일 철거 (1면당)","s":"타일 떠붙임 추가비용 포함","u":"식","labor":80000,"lp":-3},{"n":"욕실 전체 철거","s":"벽/바닥/천장 철거, 방수포함","u":"식","mat":60000,"mp":-2,"labor":650000,"lp":-3},{"n":"UBR 욕실 철거","s":"전체 철거 및 설비 추가","u":"식","mat":150000,"mp":-2,"labor":1450000,"lp":-3},{"n":"라디에이터 철거","s":"기본 소형","u":"EA","mat":20000,"mp":-2,"labor":90000,"lp":-3},{"n":"안전손잡이바","s":"-","u":"EA","mat":30000,"mp":-2,"labor":15000,"lp":-3},{"n":"도기 세팅 비용","s":"일반 타일","u":"식","mat":250000,"mp":-2,"exp":10000,"ep":-3},{"n":"도기 세팅 비용 (포세린)","s":"포세린 타일","u":"식","mat":350000,"mp":-2,"exp":10000,"ep":-3},{"n":"도기류 운임 및 양중","s":"-","u":"식","mat":140000,"mp":-2},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""}]},"6-1":{"label":"도장 공사","margin":0.25,"items":[{"n":"발코니 바이오세라믹 (1BAY)","s":"-","u":"식","labor":350000,"lp":-3,"exp":16000,"ep":-3,"mo":0.1},{"n":"발코니 바이오세라믹 (2BAY)","s":"-","u":"식","labor":450000,"lp":-3,"exp":16000,"ep":-3,"mo":0.2},{"n":"발코니 바이오세라믹 (3BAY)","s":"-","u":"식","labor":550000,"lp":-3,"exp":16000,"ep":-3,"mo":0.18},{"n":"발코니 바이오세라믹 (4BAY)","s":"-","u":"식","labor":650000,"lp":-3,"exp":16000,"ep":-3,"mo":0.16},{"n":"발코니 바이오세라믹 (5BAY)","s":"-","u":"식","labor":750000,"lp":-3,"exp":16000,"ep":-3,"mo":0.14},{"n":"발코니 바이오세라믹 (6BAY)","s":"-","u":"식","labor":850000,"lp":-3,"exp":16000,"ep":-3,"mo":0.12},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""}]},"6-2":{"label":"인테리어 필름","margin":0.25,"items":[{"n":"기타 부대비용","s":"-","u":"식","exp":120000,"ep":-3},{"n":"방문 (평판형도어)","s":"평판 기본형","u":"EA","mat":45000,"mp":-2,"labor":55000,"lp":-3},{"n":"방문 (디자인도어)","s":"디자인 도어","u":"EA","mat":49500,"mp":-2,"labor":65000,"lp":-3},{"n":"방 문틀 (기본)","s":"기본문틀","u":"EA","mat":27000,"mp":-2,"labor":64000,"lp":-3},{"n":"방문 및 문틀 SET (평판형 도어)","s":"평판 기본형","u":"개소","mat":72000,"mp":-2,"labor":121000,"lp":-3},{"n":"방문 및 문틀 SET (디자인 도어)","s":"디자인 도어","u":"개소","mat":76500,"mp":-2,"labor":128000,"lp":-3},{"n":"샷시 대창 (단창)","s":"h: 2100 이상","u":"EA","mat":22500,"mp":-2,"labor":91000,"lp":-3},{"n":"샷시 대창 (이중창)","s":"h: 2100 이상","u":"EA","mat":28500,"mp":-2,"labor":132000,"lp":-3},{"n":"샷시 중창 (단창)","s":"-","u":"EA","mat":19500,"mp":-2,"labor":69500,"lp":-3},{"n":"샷시 중창 (이중창)","s":"-","u":"EA","mat":24500,"mp":-2,"labor":88500,"lp":-3},{"n":"현관문","s":"-","u":"EA","mat":93500,"mp":-2,"labor":125000,"lp":-3},{"n":"방문 및 문틀 (유리)","s":"유리 4개 미만","u":"EA","mat":45000,"mp":-2,"labor":135000,"lp":-3},{"n":"중문","s":"유리문","u":"EA","mat":80000,"mp":-2,"labor":220000,"lp":-3},{"n":"붙박이 도어","s":"도어 2개 set","u":"set","mat":22500,"mp":-2,"labor":86000,"lp":-3},{"n":"기타 마감","s":"인건비","u":"인","labor":290000,"lp":-3,"exp":10000,"ep":-3,"mo":0.0},{"n":"기타 필름 자재 비용","s":"영림 / 예림 / LX / 현대","u":"m","mat":9000,"mp":-2,"mo":0.0},{"n":"기타부대비용","s":"-","u":"식","exp":250000,"ep":-3},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""}]},"7-1":{"label":"도배","margin":0.35,"items":[{"n":"LX 지인 휘앙세","s":"합지 / 광폭","u":"㎡","mat":1240,"mp":-2},{"n":"LX 지인 베스티/프레쉬","s":"실크 / 기본형","u":"㎡","mat":2570,"mp":-2},{"n":"LX 지인 페브릭","s":"실크 / 고급형","u":"㎡","mat":2960,"mp":-2},{"n":"LX 지인 디아망","s":"실크 / 최고급형","u":"㎡","mat":4510,"mp":-2},{"n":"LX 지인 천장용 (베스티)","s":"천장 / 실크 / 기본형","u":"㎡","mat":1470,"mp":-2},{"n":"LX 지인 천장용 (페브릭)","s":"천장 / 실크 / 패턴형","u":"롤","mat":74000,"mp":-2},{"n":"부자재","s":"초배지/도배용풀","u":"㎡","mat":1200,"mp":-2},{"n":"LINE PUTTY","s":"도배면 퍼티작업","u":"식","mat":40000,"mp":-2,"labor":280000,"lp":-3,"mo":0.0},{"n":"인건비","s":"-","u":"인","labor":280000,"lp":-3,"exp":10000,"ep":-3,"mo":0.0},{"n":"장비대","s":"-","u":"식","exp":100000,"ep":-3},{"n":"자재 업그레이드","s":"추가금","u":"-","mat":600000,"mp":-2},{"n":"기타 부대비용","s":"-","u":"식","exp":250000,"ep":-3},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""}]},"7-2":{"label":"바닥재","margin":0.35,"items":[{"n":"강마루 (기본형)","s":"한솔/동화/구정","u":"㎡","mat":28800,"mp":-2,"mo":0.15},{"n":"동화 나투스진","s":"동화마루","u":"㎡","mat":35800,"mp":-2,"mo":0.15},{"n":"동화 나투스진 텍스쳐","s":"동화마루","u":"㎡","mat":36400,"mp":-2,"mo":0.15},{"n":"구정 그랜드 텍스처","s":"구정마루","u":"㎡","mat":36400,"mp":-2,"mo":0.15},{"n":"동화 나투스진 그란데","s":"타일텍스쳐 (7t)","u":"㎡","mat":33400,"mp":-2,"mo":0.15},{"n":"한솔 SB강","s":"타일텍스쳐 (7.5t)","u":"㎡","mat":36400,"mp":-2,"mo":0.15},{"n":"장판 / 지아 자연애 2.2","s":"2.2t","u":"㎡","mat":13500,"mp":-2},{"n":"장판 / 지아 사랑애 2.7","s":"2.7t","u":"㎡","mat":18500,"mp":-2},{"n":"장판 / 지아 사랑애 3.2","s":"3.2t","u":"㎡","mat":21500,"mp":-2},{"n":"장판 / 지아 소리잠 4.5","s":"4.5t","u":"㎡","mat":27500,"mp":-2},{"n":"장판 / 지인 엑스컴포트 5.0","s":"5.0t","u":"㎡","mat":31500,"mp":-2},{"n":"데코타일 / 기본형","s":"3.0t","u":"㎡","mat":12500,"mp":-2},{"n":"자재 업그레이드","s":"추가금","u":"-","mat":600000,"mp":-2},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""}]},"8":{"label":"전기 및 조명","margin":0.25,"items":[{"n":"컨센트 및 스위치 교체","s":"르그랑 아펠라 화이트","u":"평","mat":6500,"mp":-2,"labor":12500,"lp":-2},{"n":"거실 평판엣지 조명","s":"평판 엣지 (1280*320)","u":"EA","mat":46000,"mp":-2,"labor":21500,"lp":-2},{"n":"거실 평판엣지 조명 (중)","s":"평판 엣지 (640*320)","u":"EA","mat":37500,"mp":-2,"labor":21500,"lp":-2},{"n":"거실 바리솔st (대)","s":"시트실링 1070*1070","u":"EA","mat":380000,"mp":-2,"labor":16500,"lp":-2},{"n":"거실 바리솔st (중)","s":"시트실링 640*640","u":"EA","mat":290000,"mp":-2,"labor":16500,"lp":-2},{"n":"기본형 거실등","s":"기본형 / LED / 150W","u":"EA","mat":160000,"mp":-2,"labor":18500,"lp":-2},{"n":"거실 메인 다운라이트 x 2","s":"2인치/3인치 * 2","u":"EA","mat":19500,"mp":-2,"labor":41000,"lp":-2},{"n":"거실 메인 다운라이트 x 3","s":"2인치/3인치 * 3","u":"EA","mat":22500,"mp":-2,"labor":48300,"lp":-2},{"n":"기본형 방등","s":"LED 방등 / 50W","u":"EA","mat":40000,"mp":-2,"labor":16500,"lp":-2},{"n":"방등 평판 엣지","s":"평판 엣지 (640*640)","u":"EA","mat":46200,"mp":-2,"labor":21500,"lp":-2},{"n":"주방 평판 엣지 (대)","s":"1280*180","u":"EA","mat":40500,"mp":-2,"labor":21500,"lp":-2},{"n":"주방 평판 엣지 (중)","s":"640*180","u":"EA","mat":36500,"mp":-2,"labor":21500,"lp":-2},{"n":"직부등","s":"엣지 원형 / LED","u":"EA","mat":10000,"mp":-2,"labor":16500,"lp":-2},{"n":"식탁등","s":"제안 품목 중 택 1","u":"EA","mat":140000,"mp":-2,"labor":16500,"lp":-2},{"n":"전실 및 현관 센서등","s":"엣지 원형 / LED","u":"EA","mat":25000,"mp":-2,"labor":16500,"lp":-2},{"n":"전실 및 현관 매립센서 조명","s":"2\" or 3\" / 투시센서","u":"식","mat":41000,"mp":-2,"labor":46000,"lp":-2},{"n":"감지기 외","s":"차동/정온/기타","u":"식","mat":50000,"mp":-2,"labor":60000,"lp":-2},{"n":"2인치 다운라이트 / 확산형","s":"2\" / 확산형","u":"EA","mat":9000,"mp":-2,"labor":39700,"lp":-2},{"n":"3인치 다운라이트 / 확산형","s":"3\" / 확산형","u":"EA","mat":9000,"mp":-2,"labor":39700,"lp":-2},{"n":"3인치 다운라이트 / 집중형","s":"3\" / COB","u":"EA","mat":11000,"mp":-2,"labor":39700,"lp":-2},{"n":"4인치 다운라이트 / 확산형","s":"4\" / 확산형","u":"EA","mat":10500,"mp":-2,"labor":39700,"lp":-2},{"n":"T5 / 배선 작업","s":"설치 전 사전 배선작업","u":"개소","labor":39700,"lp":-2},{"n":"T5 / 설치 작업","s":"T5 조명 설치","u":"m","mat":6500,"mp":-2,"labor":9800,"lp":-2},{"n":"컨센트 신설 (옹벽/매립)","s":"-","u":"개소","mat":20000,"mp":-2,"labor":90000,"lp":-2},{"n":"스위치 추가 생성 (동일소켓)","s":"스위치 1구 > 2,3구","u":"개소","mat":20000,"mp":-2,"labor":60000,"lp":-2},{"n":"스위치 추가 생성 (추가소켓)","s":"3구이하 > 4구 이상","u":"개소","mat":30000,"mp":-2,"labor":110000,"lp":-2},{"n":"기타 전기 배선 작업","s":"기존 소켓 범위 내","u":"식","mat":220000,"mp":-2,"labor":300000,"lp":-2,"mo":0.0},{"n":"분전함 차단기 교체 작업","s":"배선용 >> 누전차단용","u":"SET","mat":130000,"mp":-2,"labor":115000,"lp":-2},{"n":"인덕션 독립배선","s":"배전반 - 가열대","u":"식","mat":45000,"mp":-2,"labor":90000,"lp":-2},{"n":"에어컨 독립 배선","s":"6게이지","u":"식","mat":60000,"mp":-2,"labor":230000,"lp":-2},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""}]},"9":{"label":"가구류 및 기타 마감작업","margin":0.25,"items":[{"n":"주방 하부장 (주문제작)","s":"도어 포함(PET)","u":"m","mat":145000,"mp":-2},{"n":"주방 벽장 (주문제작)","s":"도어 포함(PET)","u":"m","mat":139000,"mp":-2},{"n":"냉장고장 (주문제작)","s":"제작 사이즈","u":"EA","mat":150000,"mp":-2},{"n":"키큰장 (주문제작)","s":"w : 600","u":"EA","mat":280000,"mp":-2},{"n":"주방 상판","s":"LX 지인 하이막스","u":"m","mat":190000,"mp":-2},{"n":"싱크볼 / 수전","s":"백조 사각 / 기본수전","u":"식","mat":500000,"mp":-2,"mo":0.05},{"n":"후드","s":"빌트인 후드","u":"EA","mat":150000,"mp":-2},{"n":"기타 마감재 (2400)","s":"높이 2400","u":"EA","mat":90000,"mp":-2,"mo":0.2},{"n":"기타 마감재(900)","s":"높이 900 미만","u":"EA","mat":60000,"mp":-2,"mo":0.2},{"n":"주문제작 현관장","s":"제작 사이즈","u":"자","mat":170000,"mp":-2,"mo":0.15},{"n":"주문 제작 수납장","s":"제작 사이즈","u":"자","mat":120000,"mp":-2,"mo":0.1},{"n":"발코니 공틀장","s":"W:1500 미만","u":"SET","mat":380000,"mp":-2,"mo":0.1},{"n":"시공비","s":"인건비 / 장비대 포함","u":"인","labor":350000,"lp":-3,"exp":20000,"ep":-3,"mo":0.0},{"n":"기타 추가비용","s":"추가금","u":"-","mat":200000,"mp":-2},{"n":"3연동 중문","s":"울트라 초슬림형","u":"SET","mat":790000,"mp":-2,"mo":0.1},{"n":"프리미엄 슬라이딩 중문","s":"1 PCS / 컬러선택","u":"PCS","mat":840000,"mp":-2},{"n":"주문 제작 중문","s":"-","u":"SET","mat":750000,"mp":-2},{"n":"중문 (양개형)","s":"양개형","u":"SET","mat":650000,"mp":-2},{"n":"중문 (스윙방식)","s":"스윙방식 / 주문제작","u":"SET","mat":720000,"mp":-2},{"n":"폴딩도어","s":"1pcs당 최대 wide: 550mm","u":"PCS","mat":290000,"mp":-2},{"n":"현장 정리 및 폐기물 처리","s":"공사 후 폐기물 처리","u":"식","labor":250000,"lp":-3,"exp":350000,"ep":-3},{"n":"실리콘 시공 및 기타 마감","s":"전체 필요 부위","u":"식","mat":60000,"mp":-2,"labor":250000,"lp":-3,"exp":10000,"ep":-3},{"n":"샷시 실리콘 시공 (내부)","s":"샷시 필름 시공 마감","u":"식","mat":50000,"mp":-2,"labor":250000,"lp":-3,"exp":10000,"ep":-3},{"n":"기타 마감","s":"전체 필요 부위","u":"식","mat":20000,"mp":-2,"labor":220000,"lp":-3},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""}]},"10":{"label":"기타","margin":0.2,"items":[{"n":"공사 동의 대행","s":"업체 대행","u":"식","labor":150000,"lp":-3,"exp":15000,"ep":-3,"mo":0.0},{"n":"입주 청소","s":"별도 진행","u":"평당","labor":12000,"lp":-3,"mo":0.0},{"n":"공사 동의 대행(행위허가)","s":"업체 대행","u":"식","labor":210000,"lp":-3,"mo":0.0},{"n":"행위허가 신고 대행","s":"업체 대행","u":"식","labor":330000,"lp":-3,"mo":0.0},{"n":"세대 인터폰","s":"단지 내 호환 제품","u":"SET","mat":350000,"mp":-2,"labor":60000,"lp":-3,"exp":10000,"ep":-3,"mo":0.1},{"n":"현관 도어락","s":"삼성 푸시풀 기본형","u":"SET","mat":250000,"mp":-2,"labor":40000,"lp":-3,"exp":10000,"ep":-3,"mo":0.1},{"n":"시스템 에어컨","s":"","u":"식","exp":150000,"ep":-3},{"n":"옥외 방수 공사","s":"우레탄 기본","u":"㎡","labor":36000,"lp":-3,"exp":800,"ep":-3,"mo":0.15},{"n":"옥외 방수 공사","s":"우레탄 / 고급","u":"㎡","labor":43000,"lp":-3,"exp":800,"ep":-3,"mo":0.15},{"n":"도시가스관 철거","s":"기본 3m 이내","u":"식","exp":110000,"ep":-3},{"n":"도시가스관 주름관 매립작업","s":"길이에 따라 일부 변동 가능","u":"식","exp":250000,"ep":-3},{"n":"주방 후드용 소화기","s":"-","u":"식","exp":250000,"ep":-3},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""},{"n":"","s":"","u":""}]}};   // { group: { label, margin, items:[{n,s,u,mat,mp,labor,lp,exp,ep,mo}] } }
+
+const CAT_ORDER = ["1","2","3","4","5","6-1","6-2","7-1","7-2","8","9","10"];
+const CAT_META = {
+  "1":   {no:"1",   title:"철거 및 설비"},
+  "2":   {no:"2",   title:"창호 및 금속류"},
+  "3":   {no:"3",   title:"목공사 및 도어류"},
+  "4":   {no:"4",   title:"타일 공사"},
+  "5":   {no:"5",   title:"욕실 공사"},
+  "6-1": {no:"6-1", title:"도장 공사"},
+  "6-2": {no:"6-2", title:"인테리어 필름"},
+  "7-1": {no:"7-1", title:"도배"},
+  "7-2": {no:"7-2", title:"바닥재"},
+  "8":   {no:"8",   title:"전기 및 조명"},
+  "9":   {no:"9",   title:"가구류 및 기타 마감작업"},
+  "10":  {no:"10",  title:"기타"},
+};
+const CAT_GROUPS = {
+  "1":["1"], "2":["2"], "3":["3"], "4":["4"],
+  "5":["5a","5b"],
+  "6-1":["6-1"], "6-2":["6-2"], "7-1":["7-1"], "7-2":["7-2"],
+  "8":["8"], "9":["9"], "10":["10"],
+};
+
+const IND_GEN = 0.025;   // 일반관리비
+const IND_MISC = 0.010;  // 공과잡비
+const VAT = 0.10;
+
+/* ============ State ============ */
+const state = {
+  mode: "quote",     // "quote" | "admin"
+  active: "1",
+  qty: {},           // key `${group}|${i}` -> {q:Number, opt:Boolean}
+  custom: {},        // key group -> [{id,n,u,p,q,opt}]
+  priceOverride: {}, // key `${group}|${i}` -> {mat?,labor?,exp?,mo?}  (only edited fields)
+  marginOverride: {},// key group -> number (0~1), category-level margin override
+  meta: { project:"", customer:"", date: new Date().toISOString().slice(0,10) },
+};
+let customSeq = 1;
+
+/* ============ Math helpers ============ */
+function roundUp(value, digits){
+  if(!value) return 0;
+  const factor = Math.pow(10, -digits);
+  const scaled = value / factor;
+  return Math.ceil(scaled - 1e-9) * factor;
+}
+function won(n){
+  n = Math.round(n||0);
+  return n.toLocaleString('ko-KR');
+}
+function lineAmt(price, q){ return (price||0) * (q||0); }
+function pct(m){ return (Math.round(m*1000)/10); } // 0.25 -> 25 (for % input display, 1 decimal precision)
+
+/* ============ Pricing engine ============ */
+function effItem(group, i){
+  const orig = CATALOG[group].items[i];
+  const ov = state.priceOverride[group+"|"+i] || {};
+  return {
+    n: ov.n !== undefined ? ov.n : orig.n,
+    s: ov.s !== undefined ? ov.s : orig.s,
+    u: ov.u !== undefined ? ov.u : orig.u,
+    mat: ov.mat !== undefined ? ov.mat : orig.mat,
+    mp: orig.mp || -2,
+    labor: ov.labor !== undefined ? ov.labor : orig.labor,
+    lp: orig.lp || -3,
+    exp: ov.exp !== undefined ? ov.exp : orig.exp,
+    ep: orig.ep || -3,
+    mo: ov.mo !== undefined ? ov.mo : orig.mo,
+  };
+}
+function categoryMargin(group){
+  return state.marginOverride[group] !== undefined ? state.marginOverride[group] : CATALOG[group].margin;
+}
+function computePrice(group, i){
+  const it = effItem(group, i);
+  const m = (it.mo !== undefined && it.mo !== null) ? it.mo : categoryMargin(group);
+  let total = 0;
+  if(it.mat !== undefined && it.mat !== null) total += roundUp(it.mat * (1+m), it.mp);
+  if(it.labor !== undefined && it.labor !== null) total += roundUp(it.labor * (1+m), it.lp);
+  if(it.exp !== undefined && it.exp !== null) total += roundUp(it.exp * (1+m), it.ep);
+  return Math.round(total);
+}
+function setPriceField(group, i, field, value){
+  const k = group+"|"+i;
+  const cur = state.priceOverride[k] || {};
+  state.priceOverride[k] = Object.assign({}, cur, {[field]: value});
+}
+function resetGroupPricing(group){
+  Object.keys(state.priceOverride).forEach(k=>{
+    if(k.startsWith(group+"|")) delete state.priceOverride[k];
+  });
+  delete state.marginOverride[group];
+}
+function resetAllPricing(){
+  state.priceOverride = {};
+  state.marginOverride = {};
+}
+
+/* ============ Quantity / custom item state ============ */
+function getQty(group, i){
+  const k = group+"|"+i;
+  return state.qty[k] || {q:0, opt:false};
+}
+function setQty(group, i, patch){
+  const k = group+"|"+i;
+  const cur = state.qty[k] || {q:0, opt:false};
+  state.qty[k] = Object.assign({}, cur, patch);
+}
+function getCustomList(group){
+  return state.custom[group] || [];
+}
+function addCustom(group, n, u, p, opt){
+  if(!n || !p) return;
+  const list = getCustomList(group).slice();
+  list.push({id:"c"+(customSeq++), n:n, u:u||'식', p:Number(p)||0, q:1, opt:!!opt});
+  state.custom[group] = list;
+  renderAll();
+}
+function updateCustom(group, id, patch){
+  state.custom[group] = getCustomList(group).map(it => it.id===id ? Object.assign({}, it, patch) : it);
+}
+function removeCustom(group, id){
+  state.custom[group] = getCustomList(group).filter(it=>it.id!==id);
+  renderAll();
+}
+function groupSum(group){
+  let sum = 0;
+  CATALOG[group].items.forEach((it,i)=>{
+    const st = getQty(group,i);
+    if(st.q>0) sum += lineAmt(computePrice(group,i), st.q);
+  });
+  getCustomList(group).forEach(it=>{
+    if(it.q>0) sum += lineAmt(it.p, it.q);
+  });
+  return sum;
+}
+
+/* ============ Totals ============ */
+function computeTotals(){
+  let basicDirect = 0, optionDirect = 0;
+  const byCat = {};
+  CAT_ORDER.forEach(cid=>{
+    let sum = 0;
+    CAT_GROUPS[cid].forEach(group=>{
+      sum += groupSum(group);
+      CATALOG[group].items.forEach((it,i)=>{
+        const st = getQty(group, i);
+        if(st.q>0){
+          const amt = lineAmt(computePrice(group,i), st.q);
+          if(st.opt) optionDirect += amt; else basicDirect += amt;
+        }
+      });
+      getCustomList(group).forEach(it=>{
+        if(it.q>0){
+          const amt = lineAmt(it.p, it.q);
+          if(it.opt) optionDirect += amt; else basicDirect += amt;
+        }
+      });
+    });
+    byCat[cid] = sum;
+  });
+  const directTotal = basicDirect + optionDirect;
+  const indGen = directTotal * IND_GEN;
+  const indMisc = directTotal * IND_MISC;
+  const indirectTotal = indGen + indMisc;
+  const subtotal = directTotal + indirectTotal;
+  const vat = subtotal * VAT;
+  const grand = subtotal + vat;
+  return {basicDirect, optionDirect, directTotal, indGen, indMisc, indirectTotal, subtotal, vat, grand, byCat};
+}
+
+/* ============ Persistence (localStorage) ============ */
+const STORAGE_DRAFT = 'ds_estimate_draft_v1';
+const STORAGE_SAVED  = 'ds_estimate_saved_v1';
+function saveDraft(){
+  try{
+    localStorage.setItem(STORAGE_DRAFT, JSON.stringify({
+      qty: state.qty, custom: state.custom,
+      priceOverride: state.priceOverride, marginOverride: state.marginOverride,
+      meta: state.meta,
+    }));
+  }catch(e){ /* storage unavailable (e.g. private mode) -- fail silently */ }
+}
+function loadDraft(){
+  try{
+    const raw = localStorage.getItem(STORAGE_DRAFT);
+    if(!raw) return;
+    const obj = JSON.parse(raw);
+    state.qty = obj.qty || {};
+    state.custom = obj.custom || {};
+    state.priceOverride = obj.priceOverride || {};
+    state.marginOverride = obj.marginOverride || {};
+    state.meta = Object.assign(state.meta, obj.meta || {});
+  }catch(e){ /* ignore corrupt draft */ }
+}
+function loadSavedList(){
+  try{ return JSON.parse(localStorage.getItem(STORAGE_SAVED) || '[]'); }
+  catch(e){ return []; }
+}
+function writeSavedList(list){
+  try{ localStorage.setItem(STORAGE_SAVED, JSON.stringify(list)); }
+  catch(e){ alert('브라우저 저장 공간이 부족하거나 사용할 수 없습니다.'); }
+}
+function saveCurrentAsSnapshot(label){
+  const t = computeTotals();
+  const list = loadSavedList();
+  const snap = {
+    id: 's'+Date.now(),
+    customer: label || state.meta.customer || '(이름 없음)',
+    project: state.meta.project || '',
+    savedAt: new Date().toISOString(),
+    grandTotal: t.grand,
+    data: {
+      qty: state.qty, custom: state.custom,
+      priceOverride: state.priceOverride, marginOverride: state.marginOverride,
+      meta: state.meta,
+    },
+  };
+  list.unshift(snap);
+  writeSavedList(list);
+}
+function loadSnapshot(id){
+  const snap = loadSavedList().find(s=>s.id===id);
+  if(!snap) return;
+  state.qty = snap.data.qty || {};
+  state.custom = snap.data.custom || {};
+  state.priceOverride = snap.data.priceOverride || {};
+  state.marginOverride = snap.data.marginOverride || {};
+  state.meta = Object.assign(state.meta, snap.data.meta || {});
+  state.mode = 'quote';
+  renderAll();
+}
+function deleteSnapshot(id){
+  writeSavedList(loadSavedList().filter(s=>s.id!==id));
+}
+
+/* ============ DOM refs ============ */
+const $nav = document.getElementById('nav-list');
+const $main = document.getElementById('main-content');
+const $summary = document.getElementById('summary-content');
+const $modeBtns = document.querySelectorAll('[data-mode-btn]');
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ============ Nav ============ */
+function renderNav(){
+  const t = computeTotals();
+  $nav.innerHTML = '';
+  CAT_ORDER.forEach(cid=>{
+    const meta = CAT_META[cid];
+    const btn = document.createElement('button');
+    btn.className = 'nav-item' + (state.active===cid ? ' active':'');
+    btn.innerHTML = '<span class="idx">'+meta.no+'</span><span>'+meta.title+'</span>'
+      + (t.byCat[cid] > 0 ? '<span class="cnt">'+won(t.byCat[cid])+'</span>' : '');
+    btn.onclick = ()=>{ state.active = cid; if(state.mode==='saved') state.mode='quote'; renderAll(); window.scrollTo(0,0); };
+    $nav.appendChild(btn);
+  });
+}
+
+/* ============ Quote-builder table ============ */
+function itemRowHTML(group, i){
+  const it = effItem(group, i);
+  const price = computePrice(group, i);
+  const st = getQty(group,i);
+  const amt = lineAmt(price, st.q);
+  return ''+
+  '<tr class="'+(st.q>0?'has-qty':'')+'">'+
+    '<td class="col-idx num">'+(i+1)+'</td>'+
+    '<td class="col-name"><div class="item-name">'+escapeHtml(it.n)+'</div>'+(it.s?'<div class="item-spec">'+escapeHtml(it.s)+'</div>':'')+'</td>'+
+    '<td class="col-unit">'+escapeHtml(it.u)+'</td>'+
+    '<td class="col-price num">'+won(price)+'</td>'+
+    '<td class="col-opt"><input type="checkbox" class="opt-check" '+(st.opt?'checked':'')+' data-role="opt" data-group="'+group+'" data-i="'+i+'" title="옵션 공사로 표시"></td>'+
+    '<td class="col-qty"><input type="number" min="0" step="1" class="qty-input num" value="'+(st.q||'')+'" placeholder="0" data-role="qty" data-group="'+group+'" data-i="'+i+'" onfocus="this.select()"></td>'+
+    '<td class="col-amt num"><span class="amt-text">'+(st.q>0? won(amt) : '')+'</span></td>'+
+  '</tr>';
+}
+function customRowHTML(group, it){
+  const amt = lineAmt(it.p, it.q);
+  return ''+
+  '<tr class="custom-row '+(it.q>0?'has-qty':'')+'">'+
+    '<td class="col-idx num">＋</td>'+
+    '<td class="col-name"><div class="item-name">'+escapeHtml(it.n)+' <span style="color:var(--accent);font-size:10.5px;font-weight:700;">직접입력</span></div></td>'+
+    '<td class="col-unit">'+escapeHtml(it.u)+'</td>'+
+    '<td class="col-price num">'+won(it.p)+'</td>'+
+    '<td class="col-opt"><input type="checkbox" class="opt-check" '+(it.opt?'checked':'')+' data-role="c-opt" data-group="'+group+'" data-id="'+it.id+'"></td>'+
+    '<td class="col-qty"><input type="number" min="0" step="1" class="qty-input num" value="'+(it.q||'')+'" data-role="c-qty" data-group="'+group+'" data-id="'+it.id+'" onfocus="this.select()"></td>'+
+    '<td class="col-amt num"><span class="amt-text">'+(it.q>0? won(amt):'')+'</span> <button class="btn-remove" data-role="c-del" data-group="'+group+'" data-id="'+it.id+'" title="삭제">×</button></td>'+
+  '</tr>';
+}
+function quoteTableHTML(group){
+  const items = CATALOG[group].items;
+  let rows = items.map((it,i)=>{
+    const eff = effItem(group,i);
+    return eff.n ? itemRowHTML(group,i) : '';
+  }).join('');
+  rows += getCustomList(group).map(it=>customRowHTML(group,it)).join('');
+  return ''+
+  '<table class="items">'+
+    '<thead><tr>'+
+      '<th class="col-idx">No</th><th class="col-name">품명 / 규격</th><th class="col-unit">단위</th>'+
+      '<th class="col-price">단가</th><th class="col-opt">옵션</th><th class="col-qty">수량</th><th class="col-amt">금액</th>'+
+    '</tr></thead>'+
+    '<tbody>'+rows+'</tbody>'+
+  '</table>'+
+  '<div class="cat-subtotal" id="subtotal-'+group+'">소계 <b>'+won(groupSum(group))+'</b> 원</div>'+
+  '<div class="custom-add">'+
+    '<div class="custom-add-title">목록에 없는 항목 직접 추가</div>'+
+    '<div class="custom-add-grid">'+
+      '<input type="text" placeholder="품명" data-role="new-n" data-group="'+group+'">'+
+      '<input type="text" placeholder="단위 (예: EA, m, 식)" data-role="new-u" data-group="'+group+'">'+
+      '<input type="number" placeholder="단가" data-role="new-p" data-group="'+group+'">'+
+      '<label style="font-size:12px;color:var(--ink-dim);display:flex;align-items:center;gap:5px;"><input type="checkbox" class="opt-check" data-role="new-opt" data-group="'+group+'"> 옵션</label>'+
+      '<button class="btn-add" data-role="new-add" data-group="'+group+'">추가</button>'+
+    '</div>'+
+  '</div>';
+}
+
+/* ============ Admin (price & margin) table ============ */
+function costCellHTML(group, i, field, value, placeholder){
+  return '<input type="number" class="cost-input num" value="'+(value===undefined||value===null?'':value)+'" placeholder="'+placeholder+'" data-role="cost" data-field="'+field+'" data-group="'+group+'" data-i="'+i+'" onfocus="this.select()">';
+}
+function adminRowHTML(group, i){
+  const it = effItem(group, i);
+  const price = computePrice(group, i);
+  return ''+
+  '<tr>'+
+    '<td class="col-idx num">'+(i+1)+'</td>'+
+    '<td class="col-name">'+
+      '<input type="text" class="name-input" value="'+escapeHtml(it.n)+'" placeholder="품명 입력" data-role="name-edit" data-group="'+group+'" data-i="'+i+'">'+
+      '<input type="text" class="spec-input" value="'+escapeHtml(it.s)+'" placeholder="규격 (선택)" data-role="spec-edit" data-group="'+group+'" data-i="'+i+'">'+
+    '</td>'+
+    '<td class="col-unit"><input type="text" class="unit-input" value="'+escapeHtml(it.u)+'" placeholder="단위" data-role="unit-edit" data-group="'+group+'" data-i="'+i+'"></td>'+
+    '<td class="col-cost">'+costCellHTML(group,i,'mat',it.mat,'재료비')+'</td>'+
+    '<td class="col-cost">'+costCellHTML(group,i,'labor',it.labor,'노무비')+'</td>'+
+    '<td class="col-cost">'+costCellHTML(group,i,'exp',it.exp,'경비')+'</td>'+
+    '<td class="col-margin"><input type="number" class="cost-input num margin-input" step="0.1" value="'+(it.mo!==undefined&&it.mo!==null? pct(it.mo):'')+'" placeholder="기본" data-role="item-margin" data-group="'+group+'" data-i="'+i+'" onfocus="this.select()"> %</td>'+
+    '<td class="col-final num"><span class="final-price">'+(price>0? won(price):'')+'</span></td>'+
+  '</tr>';
+}
+function adminTableHTML(group){
+  const items = CATALOG[group].items;
+  const rows = items.map((it,i)=>adminRowHTML(group,i)).join('');
+  const margin = categoryMargin(group);
+  return ''+
+  '<div class="margin-box" id="marginbox-'+group+'">'+
+    '<div class="margin-box-label">'+escapeHtml(CATALOG[group].label)+' — 기본 마진율</div>'+
+    '<div class="margin-box-row">'+
+      '<input type="number" class="margin-cat-input num" step="0.1" value="'+pct(margin)+'" data-role="cat-margin" data-group="'+group+'"> %'+
+      '<span class="margin-box-hint">개별 항목에 마진율을 따로 입력하지 않으면 이 값이 적용됩니다. 빈 칸은 아직 등록되지 않은 항목이며, 품명과 단가를 입력하면 견적 작성 탭에 자동으로 나타납니다.</span>'+
+      '<button class="btn-secondary btn-reset-group" data-role="reset-group" data-group="'+group+'">이 공종 단가 초기화</button>'+
+    '</div>'+
+  '</div>'+
+  '<table class="items admin-table">'+
+    '<thead><tr>'+
+      '<th class="col-idx">No</th><th class="col-name">품명 / 규격</th><th class="col-unit">단위</th>'+
+      '<th class="col-cost">재료비</th><th class="col-cost">노무비</th><th class="col-cost">경비</th>'+
+      '<th class="col-margin">개별 마진율</th><th class="col-final">최종 단가</th>'+
+    '</tr></thead>'+
+    '<tbody>'+rows+'</tbody>'+
+  '</table>';
+}
+
+/* ============ Main render ============ */
+function renderMain(){
+  if(state.mode === 'saved'){ renderSavedView(); return; }
+  const cid = state.active;
+  const meta = CAT_META[cid];
+  let body = '<div class="cat-head"><div class="eyebrow">CATEGORY '+meta.no+' · '+(state.mode==='admin'?'단가·마진 관리':'견적 작성')+'</div><h2>'+meta.title+'</h2></div>';
+
+  const groups = cid==="5" ? [["5a",CATALOG["5a"].label],["5b",CATALOG["5b"].label]] : [[CAT_GROUPS[cid][0], null]];
+
+  groups.forEach(([group,label])=>{
+    if(label) body += '<div class="subgroup-title">'+label+'</div>';
+    body += state.mode === 'admin' ? adminTableHTML(group) : quoteTableHTML(group);
+  });
+
+  $main.innerHTML = body;
+  bindMainEvents();
+}
+
+function bindMainEvents(){
+  if(state.mode === 'quote'){
+    $main.querySelectorAll('[data-role="qty"]').forEach(el=>{
+      el.addEventListener('input', e=>{
+        const group = e.target.dataset.group, i = parseInt(e.target.dataset.i,10);
+        const v = Math.max(0, parseInt(e.target.value||'0',10)||0);
+        setQty(group, i, {q:v});
+        updateRowAmount(e.target.closest('tr'), computePrice(group,i), v);
+        updateSubtotalDisplay(group);
+        renderNav(); renderSummary();
+      });
+    });
+    $main.querySelectorAll('[data-role="opt"]').forEach(el=>{
+      el.addEventListener('change', e=>{
+        setQty(e.target.dataset.group, parseInt(e.target.dataset.i,10), {opt:e.target.checked});
+        renderSummary();
+      });
+    });
+    $main.querySelectorAll('[data-role="c-qty"]').forEach(el=>{
+      el.addEventListener('input', e=>{
+        const group = e.target.dataset.group, id = e.target.dataset.id;
+        const v = Math.max(0, parseInt(e.target.value||'0',10)||0);
+        updateCustom(group, id, {q:v});
+        const it = getCustomList(group).find(x=>x.id===id);
+        updateRowAmount(e.target.closest('tr'), it.p, v);
+        updateSubtotalDisplay(group);
+        renderNav(); renderSummary();
+      });
+    });
+    $main.querySelectorAll('[data-role="c-opt"]').forEach(el=>{
+      el.addEventListener('change', e=>{
+        updateCustom(e.target.dataset.group, e.target.dataset.id, {opt:e.target.checked});
+        renderSummary();
+      });
+    });
+    $main.querySelectorAll('[data-role="c-del"]').forEach(el=>{
+      el.addEventListener('click', e=>{ removeCustom(e.target.dataset.group, e.target.dataset.id); });
+    });
+    $main.querySelectorAll('[data-role="new-add"]').forEach(el=>{
+      el.addEventListener('click', e=>{
+        const group = e.target.dataset.group;
+        const root = e.target.closest('.custom-add-grid');
+        const n = root.querySelector('[data-role="new-n"]').value.trim();
+        const u = root.querySelector('[data-role="new-u"]').value.trim();
+        const p = root.querySelector('[data-role="new-p"]').value;
+        const opt = root.querySelector('[data-role="new-opt"]').checked;
+        if(!n || !p){ alert('품명과 단가를 입력해 주세요.'); return; }
+        addCustom(group, n, u, p, opt);
+      });
+    });
+  } else {
+    // admin mode
+    $main.querySelectorAll('[data-role="name-edit"]').forEach(el=>{
+      el.addEventListener('input', e=>{
+        setPriceField(e.target.dataset.group, parseInt(e.target.dataset.i,10), 'n', e.target.value);
+        saveDraft();
+      });
+    });
+    $main.querySelectorAll('[data-role="spec-edit"]').forEach(el=>{
+      el.addEventListener('input', e=>{
+        setPriceField(e.target.dataset.group, parseInt(e.target.dataset.i,10), 's', e.target.value);
+        saveDraft();
+      });
+    });
+    $main.querySelectorAll('[data-role="unit-edit"]').forEach(el=>{
+      el.addEventListener('input', e=>{
+        setPriceField(e.target.dataset.group, parseInt(e.target.dataset.i,10), 'u', e.target.value);
+        saveDraft();
+      });
+    });
+    $main.querySelectorAll('[data-role="cost"]').forEach(el=>{
+      el.addEventListener('input', e=>{
+        const group = e.target.dataset.group, i = parseInt(e.target.dataset.i,10), field = e.target.dataset.field;
+        const v = e.target.value === '' ? 0 : Number(e.target.value);
+        setPriceField(group, i, field, v);
+        updateFinalPriceCell(e.target.closest('tr'), group, i);
+        renderNav(); renderSummaryOnly();
+      });
+    });
+    $main.querySelectorAll('[data-role="item-margin"]').forEach(el=>{
+      el.addEventListener('input', e=>{
+        const group = e.target.dataset.group, i = parseInt(e.target.dataset.i,10);
+        const raw = e.target.value;
+        const v = raw === '' ? undefined : Number(raw)/100;
+        setPriceField(group, i, 'mo', v);
+        updateFinalPriceCell(e.target.closest('tr'), group, i);
+        renderNav(); renderSummaryOnly();
+      });
+    });
+    $main.querySelectorAll('[data-role="cat-margin"]').forEach(el=>{
+      el.addEventListener('input', e=>{
+        const group = e.target.dataset.group;
+        const v = e.target.value === '' ? CATALOG[group].margin : Number(e.target.value)/100;
+        state.marginOverride[group] = v;
+        refreshGroupFinalPrices(group);
+        renderNav(); renderSummaryOnly();
+      });
+    });
+    $main.querySelectorAll('[data-role="reset-group"]').forEach(el=>{
+      el.addEventListener('click', e=>{
+        const group = e.target.dataset.group;
+        if(confirm('"'+CATALOG[group].label+'" 공종의 단가와 마진율을 원본 값으로 초기화할까요?')){
+          resetGroupPricing(group);
+          renderAll();
+        }
+      });
+    });
+  }
+}
+function updateRowAmount(tr, price, q){
+  const span = tr.querySelector('.amt-text');
+  if(span) span.textContent = q>0 ? won(lineAmt(price,q)) : '';
+  tr.classList.toggle('has-qty', q>0);
+}
+function updateSubtotalDisplay(group){
+  const el = document.getElementById('subtotal-'+group);
+  if(el) el.innerHTML = '소계 <b>'+won(groupSum(group))+'</b> 원';
+}
+function updateFinalPriceCell(tr, group, i){
+  const span = tr.querySelector('.final-price');
+  if(span) span.textContent = won(computePrice(group,i));
+}
+function refreshGroupFinalPrices(group){
+  $main.querySelectorAll('tr').forEach(tr=>{
+    const span = tr.querySelector('.final-price');
+    if(!span) return;
+    const input = tr.querySelector('[data-role="cost"], [data-role="item-margin"]');
+    if(!input) return;
+    if(input.dataset.group !== group) return;
+    const i = parseInt(input.dataset.i,10);
+    span.textContent = won(computePrice(group,i));
+  });
+}
+
+/* ============ Saved quotes view ============ */
+function renderSavedView(){
+  const list = loadSavedList();
+  const t = computeTotals();
+  let html = '<div class="cat-head"><div class="eyebrow">CUSTOMER ARCHIVE</div><h2>저장된 견적 관리</h2></div>';
+  html += '<div class="save-box">'+
+    '<div class="save-box-title">현재 작업 중인 견적을 이름 붙여 저장</div>'+
+    '<div class="save-box-row">'+
+      '<input type="text" id="save-name-input" placeholder="고객명 / 프로젝트명" value="'+escapeHtml(state.meta.customer||state.meta.project||'')+'">'+
+      '<button class="btn-add" id="btn-save-snapshot">현재 견적 저장</button>'+
+    '</div>'+
+    '<div class="save-box-hint">현재 작업 중인 견적 총액: <b>₩ '+won(t.grand)+'</b> · 이 브라우저(이 컴퓨터)에만 저장되며, 새로고침해도 사라지지 않습니다.</div>'+
+  '</div>';
+
+  if(list.length===0){
+    html += '<div class="saved-empty">아직 저장된 견적이 없습니다. 위에서 고객명을 입력하고 저장해 보세요.</div>';
+  } else {
+    html += '<div class="saved-list">';
+    list.forEach(s=>{
+      let dateStr = '';
+      try{ dateStr = new Date(s.savedAt).toLocaleString('ko-KR'); }catch(e){}
+      html += '<div class="saved-item">'+
+        '<div class="saved-item-main">'+
+          '<div class="saved-item-name">'+escapeHtml(s.customer)+(s.project? ' · '+escapeHtml(s.project):'')+'</div>'+
+          '<div class="saved-item-meta">'+dateStr+' 저장 · 총 ₩ '+won(s.grandTotal||0)+'</div>'+
+        '</div>'+
+        '<div class="saved-item-actions">'+
+          '<button class="btn-secondary" data-role="load-snap" data-id="'+s.id+'">불러오기</button>'+
+          '<button class="btn-remove-snap" data-role="del-snap" data-id="'+s.id+'" title="삭제">×</button>'+
+        '</div>'+
+      '</div>';
+    });
+    html += '</div>';
+  }
+  html += '<div class="footnote">지금은 이 브라우저에만 저장되는 테스트 버전입니다. 실제 사무실에서 여러 명이 같은 저장 목록을 보려면 서버에 올려야 하는데, 준비되시면 무료로 호스팅하는 방법부터 순서대로 안내해 드릴게요.</div>';
+  $main.innerHTML = html;
+
+  document.getElementById('btn-save-snapshot').addEventListener('click', ()=>{
+    const label = document.getElementById('save-name-input').value.trim();
+    if(!label){ alert('고객명 또는 프로젝트명을 입력해 주세요.'); return; }
+    saveCurrentAsSnapshot(label);
+    renderMain();
+  });
+  $main.querySelectorAll('[data-role="load-snap"]').forEach(el=>{
+    el.addEventListener('click', e=>{
+      if(confirm('저장된 견적을 불러오면 현재 작업 중인 내용은 덮어씌워집니다. 계속할까요?')){
+        loadSnapshot(e.target.dataset.id);
+      }
+    });
+  });
+  $main.querySelectorAll('[data-role="del-snap"]').forEach(el=>{
+    el.addEventListener('click', e=>{
+      if(confirm('이 저장된 견적을 삭제할까요?')){
+        deleteSnapshot(e.target.dataset.id);
+        renderMain();
+      }
+    });
+  });
+}
+
+/* ============ Summary panel ============ */
+function summaryHTML(){
+  const t = computeTotals();
+  let html = '<div class="summary-title">견적 요약</div>';
+  html += '<ul class="summary-list">';
+  html += '<li>기본 공사 직접비<span class="amt">'+won(t.basicDirect)+'</span></li>';
+  html += '<li>옵션 공사 직접비<span class="amt">'+won(t.optionDirect)+'</span></li>';
+  html += '<li class="strong">A. 직접공사비 소계<span class="amt">'+won(t.directTotal)+'</span></li>';
+  html += '<li class="indent">일반관리비 (2.5%)<span class="amt">'+won(t.indGen)+'</span></li>';
+  html += '<li class="indent">공과잡비 (1.0%)<span class="amt">'+won(t.indMisc)+'</span></li>';
+  html += '<li class="strong">B. 간접공사비 소계<span class="amt">'+won(t.indirectTotal)+'</span></li>';
+  html += '<li class="strong">소계 (A+B)<span class="amt">'+won(t.subtotal)+'</span></li>';
+  html += '<li>부가가치세 (10%)<span class="amt">'+won(t.vat)+'</span></li>';
+  html += '</ul>';
+  html += '<div class="total-card"><div class="label">총 공사 견적 금액</div><div class="value">₩ '+won(t.grand)+'</div><div class="vat-note">부가가치세 포함 금액입니다</div></div>';
+  html += '<div class="by-cat"><div class="by-cat-title">공종별 내역</div>';
+  CAT_ORDER.forEach(cid=>{
+    const meta = CAT_META[cid];
+    const v = t.byCat[cid];
+    html += '<div class="by-cat-row '+(v?'':'zero')+'" data-cat="'+cid+'"><span>'+meta.no+'. '+meta.title+'</span><span class="amt">'+won(v)+'</span></div>';
+  });
+  html += '</div>';
+  html += '<div class="action-row">'+
+    '<button class="btn-secondary" id="btn-reset">수량 초기화</button>'+
+    '<button class="btn-primary" id="btn-print">견적서 출력</button>'+
+  '</div>';
+  html += '<div class="action-row">'+
+    '<button class="btn-secondary" id="btn-reset-price" style="flex:1 1 100%;">단가·마진 전체 초기화</button>'+
+  '</div>';
+  html += '<div class="footnote">단가 탭에서 재료비·노무비·경비와 마진율을 주기적으로 조정할 수 있습니다. 창호 특수 사이즈, 맞춤 제작 품목 등은 "직접 입력"으로 추가해 주세요.</div>';
+  return html;
+}
+function renderSummary(){
+  saveDraft();
+  $summary.innerHTML = summaryHTML();
+  bindSummaryEvents();
+}
+function renderSummaryOnly(){ renderSummary(); }
+function bindSummaryEvents(){
+  $summary.querySelectorAll('.by-cat-row').forEach(el=>{
+    el.addEventListener('click', ()=>{ state.active = el.dataset.cat; renderAll(); window.scrollTo(0,0); });
+  });
+  document.getElementById('btn-reset').addEventListener('click', ()=>{
+    if(confirm('입력한 모든 수량과 추가 항목을 초기화할까요? (단가·마진 설정은 유지됩니다)')){
+      state.qty = {}; state.custom = {}; renderAll();
+    }
+  });
+  document.getElementById('btn-reset-price').addEventListener('click', ()=>{
+    if(confirm('모든 공종의 단가·마진율 수정 내역을 원본 값으로 초기화할까요?')){
+      resetAllPricing(); renderAll();
+    }
+  });
+  document.getElementById('btn-print').addEventListener('click', buildPrintView);
+}
+
+function renderAll(){
+  $modeBtns.forEach(b=>b.classList.toggle('active', b.dataset.modeBtn===state.mode));
+  renderNav();
+  renderMain();
+  renderSummary();
+}
+
+/* ============ Meta fields ============ */
+function bindMeta(){
+  document.querySelectorAll('[data-meta]').forEach(el=>{
+    el.value = state.meta[el.dataset.meta] || '';
+    el.addEventListener('input', e=>{ state.meta[e.target.dataset.meta] = e.target.value; saveDraft(); });
+  });
+}
+function bindModeSwitch(){
+  $modeBtns.forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      state.mode = btn.dataset.modeBtn;
+      renderAll();
+      window.scrollTo(0,0);
+    });
+  });
+}
+
+/* ============ Print view ============ */
+function buildPrintView(){
+  const t = computeTotals();
+  const today = new Date().toLocaleDateString('ko-KR');
+  let rows = '';
+  CAT_ORDER.forEach(cid=>{
+    const meta = CAT_META[cid];
+    let catRows = '';
+    CAT_GROUPS[cid].forEach(group=>{
+      CATALOG[group].items.forEach((it,i)=>{
+        const st = getQty(group,i);
+        if(st.q>0){
+          const price = computePrice(group,i);
+          catRows += '<tr><td>'+escapeHtml(it.n)+(it.s?' <span style="color:#888">('+escapeHtml(it.s)+')</span>':'')+(st.opt?' <b style="color:#3E5C6B">[옵션]</b>':'')+'</td><td>'+escapeHtml(it.u)+'</td><td class="p-right">'+won(price)+'</td><td class="p-right">'+st.q+'</td><td class="p-right">'+won(lineAmt(price,st.q))+'</td></tr>';
+        }
+      });
+      getCustomList(group).forEach(it=>{
+        if(it.q>0){
+          catRows += '<tr><td>'+escapeHtml(it.n)+(it.opt?' <b style="color:#3E5C6B">[옵션]</b>':'')+'</td><td>'+escapeHtml(it.u)+'</td><td class="p-right">'+won(it.p)+'</td><td class="p-right">'+it.q+'</td><td class="p-right">'+won(lineAmt(it.p,it.q))+'</td></tr>';
+        }
+      });
+    });
+    if(catRows){
+      rows += '<tr class="p-cat-row"><td colspan="5">'+meta.no+'. '+meta.title+'</td></tr>' + catRows;
+    }
+  });
+  if(!rows){
+    rows = '<tr><td colspan="5" style="text-align:center;color:#999;">선택된 항목이 없습니다.</td></tr>';
+  }
+  const html = ''+
+    '<div class="p-title">견 적 서</div>'+
+    '<div class="p-sub">DESIGN SANGSANG INTERIOR ESTIMATE</div>'+
+    '<div class="p-meta">'+
+      '<div><span>공급자</span> 디자인상상 (585-02-03690)</div>'+
+      '<div><span>견적일</span> '+today+'</div>'+
+      '<div><span>프로젝트/공사명</span> '+escapeHtml(state.meta.project||'-')+'</div>'+
+      '<div><span>고객명</span> '+escapeHtml(state.meta.customer||'-')+' 귀하</div>'+
+      '<div><span>전시장 주소</span> 서울 강동구 고덕로 133, 롯데캐슬퍼스트상가 209호 (암사동)</div>'+
+      '<div><span>담당자</span> 윤상돈 실장</div>'+
+    '</div>'+
+    '<table class="p-table"><thead><tr><th>품명 / 규격</th><th>단위</th><th class="p-right">단가</th><th class="p-right">수량</th><th class="p-right">금액</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+    '<table class="p-totals"><tbody>'+
+      '<tr><td>A. 직접공사비 소계</td><td class="p-right">'+won(t.directTotal)+' 원</td></tr>'+
+      '<tr><td>B. 간접공사비 소계 (관리비+잡비)</td><td class="p-right">'+won(t.indirectTotal)+' 원</td></tr>'+
+      '<tr><td>소계</td><td class="p-right">'+won(t.subtotal)+' 원</td></tr>'+
+      '<tr><td>부가가치세 (10%)</td><td class="p-right">'+won(t.vat)+' 원</td></tr>'+
+      '<tr class="final"><td>총 계</td><td class="p-right">'+won(t.grand)+' 원</td></tr>'+
+    '</tbody></table>'+
+    '<div class="p-note">* 본 견적서는 V.A.T 포함 견적서이며, 발행일로부터 2주간 유효합니다.<br>* 상기 기재된 내용은 참고 단가 기준의 가견적이며, 현장 실측 및 자재·시공 방법 변경에 따라 조정될 수 있습니다.<br>* 입금계좌 : IBK기업은행 119-248205-04-016 (예금주 : 이윤정)</div>';
+  document.getElementById('printArea').innerHTML = html;
+  window.print();
+}
+
+/* ============ Init ============ */
+loadDraft();
+bindMeta();
+bindModeSwitch();
+renderAll();
+
+</script>
+</body>
+</html>
