@@ -7,6 +7,7 @@
 <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
 :root{
   --bg:#F4F1E8;
@@ -235,6 +236,8 @@ table.list tbody tr:hover{background:var(--surface-2);}
 .modal h2{font-size:16px; margin:0 0 16px; font-weight:800;}
 .field{margin-bottom:12px;}
 .field label{display:block; font-size:11px; font-weight:700; color:var(--ink-faint); text-transform:uppercase; letter-spacing:.04em; margin-bottom:5px;}
+.field label .req{color:var(--danger); font-weight:800; text-transform:none; letter-spacing:0; margin-left:3px;}
+.loading-note{padding:60px 0; text-align:center; color:var(--ink-faint); font-size:13.5px;}
 .field input, .field select, .field textarea{
   width:100%; padding:9px 11px; border:1.3px solid var(--line-strong); border-radius:8px; font-size:13px; background:#fff;
 }
@@ -284,16 +287,22 @@ table.list tbody tr:hover{background:var(--surface-2);}
 </head>
 <body>
 <div id="login-screen" class="login-screen">
-  <div class="login-box">
+  <div class="login-box" id="login-box-form">
     <div class="brand-name" style="color:var(--ink);">디자인상상</div>
-    <div class="login-sub">업무 플랫폼 · 승인된 사용자만 접속할 수 있습니다</div>
-    <label class="login-label">아이디</label>
-    <input type="text" id="login-id" class="login-input" autocomplete="username" placeholder="아이디">
+    <div class="login-sub" id="login-mode-sub">업무 플랫폼 · 승인된 사용자만 접속할 수 있습니다</div>
+    <label class="login-label">이메일</label>
+    <input type="email" id="login-id" class="login-input" autocomplete="username" placeholder="이메일 주소">
     <label class="login-label">비밀번호</label>
-    <input type="password" id="login-pw" class="login-input" autocomplete="current-password" placeholder="비밀번호">
+    <input type="password" id="login-pw" class="login-input" autocomplete="current-password" placeholder="비밀번호 (6자 이상)">
     <div id="login-error" class="login-error" style="display:none;"></div>
     <button id="login-btn" class="btn btn-primary login-submit">로그인</button>
-    <div class="login-note">※ 임시 보안 방식입니다. 실 배포 시 서버 기반 인증(Supabase)으로 교체 예정입니다.</div>
+    <button id="signup-btn" class="btn btn-ghost login-submit" style="margin-top:8px;">가입 신청</button>
+    <div class="login-note">가입 신청 후 관리자 승인이 완료되면 로그인할 수 있어요.</div>
+  </div>
+  <div class="login-box" id="login-box-pending" style="display:none;">
+    <div class="brand-name" style="color:var(--ink);">승인 대기중</div>
+    <div class="login-sub" id="pending-msg">가입 신청이 접수됐어요. 관리자(윤상돈)가 승인하면 접속할 수 있어요.</div>
+    <button id="pending-logout-btn" class="btn btn-ghost login-submit">다시 로그인 화면으로</button>
   </div>
 </div>
 <div id="app" style="display:none;">
@@ -310,50 +319,107 @@ table.list tbody tr:hover{background:var(--surface-2);}
 <div id="modal-root"></div>
 <div id="detail-root"></div>
 <script>
-/* ============ Auth ============
-   임시 비밀번호 게이트입니다. 코드에 그대로 노출되므로 진짜 보안이 아니며,
-   개발자도구로 열어보면 누구나 계정을 볼 수 있습니다.
-   실 배포 시 Supabase Auth 등 서버 기반 인증으로 반드시 교체하세요.
-   승인한 직원을 추가하려면 아래 ACCOUNTS 배열에 한 줄씩 추가하면 됩니다. */
-const ACCOUNTS = [
-  { id:'admin', pw:'sangsang2026', name:'윤상돈' },
-];
-const AUTH_KEY = 'ds_auth_user_v1';
+/* ============ Auth (Supabase) ============
+   실제 서버 기반 인증입니다. 이메일/비밀번호는 Supabase에 안전하게 저장되고,
+   새로 가입한 사람은 profiles.approved = false 상태로 시작해서
+   관리자가 Supabase 화면(Table Editor > profiles)에서 승인해줘야 로그인됩니다. */
+const SUPABASE_URL = 'https://guuksmffmhgzbqlouvib.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_xgFitqhmRMlA00fD-LXJgw_HHu2TyNX';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-function currentUser(){
-  try{ return JSON.parse(localStorage.getItem(AUTH_KEY) || 'null'); }catch(e){ return null; }
+function showLoginError(msg){
+  const err = document.getElementById('login-error');
+  err.textContent = msg;
+  err.style.display = 'block';
 }
-function doLogin(id, pw){
-  const acc = ACCOUNTS.find(a=>a.id===id && a.pw===pw);
-  if(!acc) return false;
-  localStorage.setItem(AUTH_KEY, JSON.stringify({id:acc.id, name:acc.name}));
-  return true;
+function hideLoginError(){
+  document.getElementById('login-error').style.display = 'none';
 }
-function doLogout(){
-  localStorage.removeItem(AUTH_KEY);
+function showPendingScreen(msg){
+  document.getElementById('login-box-form').style.display = 'none';
+  document.getElementById('login-box-pending').style.display = 'block';
+  if(msg) document.getElementById('pending-msg').textContent = msg;
+}
+function showLoginForm(){
+  document.getElementById('login-box-form').style.display = 'block';
+  document.getElementById('login-box-pending').style.display = 'none';
+  document.getElementById('login-id').value = '';
+  document.getElementById('login-pw').value = '';
+  hideLoginError();
+}
+
+async function attemptLogin(){
+  const email = document.getElementById('login-id').value.trim();
+  const pw = document.getElementById('login-pw').value;
+  hideLoginError();
+  if(!email || !pw){ showLoginError('이메일과 비밀번호를 입력해주세요.'); return; }
+  const btn = document.getElementById('login-btn');
+  btn.disabled = true; btn.textContent = '로그인 중…';
+  const { data, error } = await sb.auth.signInWithPassword({ email, password: pw });
+  btn.disabled = false; btn.textContent = '로그인';
+  if(error){
+    showLoginError(error.message.includes('Invalid') ? '이메일 또는 비밀번호가 올바르지 않습니다.' : error.message);
+    return;
+  }
+  await checkApprovalAndBoot(data.user);
+}
+
+async function attemptSignup(){
+  const email = document.getElementById('login-id').value.trim();
+  const pw = document.getElementById('login-pw').value;
+  hideLoginError();
+  if(!email || !pw){ showLoginError('이메일과 비밀번호를 입력해주세요.'); return; }
+  if(pw.length < 6){ showLoginError('비밀번호는 6자 이상이어야 해요.'); return; }
+  const btn = document.getElementById('signup-btn');
+  btn.disabled = true; btn.textContent = '신청 중…';
+  const { data, error } = await sb.auth.signUp({ email, password: pw });
+  btn.disabled = false; btn.textContent = '가입 신청';
+  if(error){
+    showLoginError(error.message.includes('already registered') ? '이미 가입된 이메일이에요. 로그인해주세요.' : error.message);
+    return;
+  }
+  showPendingScreen('가입 신청이 접수됐어요. 관리자(윤상돈)가 승인하면 접속할 수 있어요. 이메일 인증이 필요할 수 있으니 받은편지함도 확인해주세요.');
+}
+
+async function checkApprovalAndBoot(user){
+  const { data: profile, error } = await sb.from('profiles').select('approved, name, role').eq('id', user.id).single();
+  if(error || !profile){
+    showPendingScreen('계정 정보를 확인할 수 없어요. 잠시 후 다시 시도하거나 관리자에게 문의해주세요.');
+    await sb.auth.signOut();
+    return;
+  }
+  if(!profile.approved){
+    showPendingScreen('아직 관리자 승인 대기중이에요. 승인되면 다시 로그인해주세요.');
+    await sb.auth.signOut();
+    return;
+  }
+  bootApp({ name: profile.name || user.email, email: user.email, role: profile.role });
+}
+
+async function doLogout(){
+  await sb.auth.signOut();
   location.reload();
 }
-function attemptLogin(){
-  const id = document.getElementById('login-id').value.trim();
-  const pw = document.getElementById('login-pw').value;
-  const err = document.getElementById('login-error');
-  if(doLogin(id, pw)){ bootApp(); }
-  else{
-    err.textContent = '아이디 또는 비밀번호가 올바르지 않습니다.';
-    err.style.display = 'block';
-  }
-}
-function bootApp(){
-  const user = currentUser();
+
+function bootApp(user){
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
   const footer = document.getElementById('snav-footer');
   footer.innerHTML = '<div class="snav-user">'+escapeHtml(user?user.name:'')+' 님 로그인됨</div><button class="snav-logout" id="btn-logout">로그아웃</button>';
   document.getElementById('btn-logout').addEventListener('click', doLogout);
-  load();
-  seedIfEmpty();
+  window.CURRENT_ROLE = user && user.role || 'member';
   renderNav();
-  renderMain();
+  $main.innerHTML = '<div class="loading-note">불러오는 중…</div>';
+  load().then(function(ok){
+    if(!ok){
+      $main.innerHTML = '<div class="loading-note">데이터를 불러오지 못했어요. 인터넷 연결을 확인하고 새로고침해 주세요.</div>';
+      return;
+    }
+    if(state.customers.length===0 && state.events.length===0 && state.projects.length===0){
+      seedIfEmpty();
+    }
+    renderMain();
+  });
 }
 
 /* ============ Constants ============ */
@@ -396,26 +462,102 @@ const state = {
   drag: null,
 };
 
-function uid(prefix){ return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
-
-/* ============ Persistence ============ */
-function save(){
-  try{
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      customers: state.customers, events: state.events, projects: state.projects,
-    }));
-  }catch(e){ /* ignore */ }
+function uid(prefix){
+  // Supabase uuid 컬럼과 호환되는 표준 UUID를 생성합니다 (prefix는 이제 쓰지 않지만 호출부 호환을 위해 유지)
+  if(window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c){
+    const r = Math.random()*16|0, v = c==='x'?r:(r&0x3|0x8);
+    return v.toString(16);
+  });
 }
-function load(){
+
+/* 주소에서 "동이름+단지명 리모델링" 형태의 프로젝트명을 추정합니다. 항상 사용자가 수정 가능합니다. */
+function generateProjectName(address){
+  if(!address) return '';
+  const tokens = address.trim().split(/\s+/);
+  let dong = '', dongIdx = -1;
+  for(let i=0;i<tokens.length;i++){
+    if(/^[가-힣]+동$/.test(tokens[i])){ dong = tokens[i]; dongIdx = i; break; }
+  }
+  let complexName = '';
+  if(dongIdx>=0){
+    for(let i=dongIdx+1;i<tokens.length;i++){
+      const t = tokens[i];
+      if(/^\d+(-\d+)?$/.test(t)) continue;
+      if(/^\d+동$/.test(t) || /^\d+호$/.test(t) || /^\d+동\d*호?$/.test(t)) break;
+      complexName += t;
+    }
+  }
+  const base = dong ? (dong + complexName) : (complexName || tokens[tokens.length-1] || '');
+  return base ? base + ' 리모델링' : '';
+}
+
+/* ============ Supabase 데이터 매핑 ============ */
+function customerToDb(c){
+  return { id:c.id, name:c.name, phone:c.phone||null, address:c.address||null, source:c.source||null,
+    status:c.status, memo:c.memo||null, email:c.email||null, site_password:c.sitePassword||null,
+    entrance_password:c.entrancePassword||null, created_at:c.createdAt||new Date().toISOString() };
+}
+function customerFromDb(r){
+  return { id:r.id, name:r.name, phone:r.phone||'', address:r.address||'', source:r.source||'',
+    status:r.status, memo:r.memo||'', email:r.email||'', sitePassword:r.site_password||'',
+    entrancePassword:r.entrance_password||'', createdAt:r.created_at };
+}
+function eventToDb(e){
+  return { id:e.id, title:e.title, type:e.type, customer_id:e.customerId||null, date:e.date,
+    start_time:e.start||null, end_time:e.end||null, location:e.location||null, memo:e.memo||null };
+}
+function eventFromDb(r){
+  return { id:r.id, title:r.title, type:r.type, customerId:r.customer_id||null, date:r.date,
+    start:r.start_time||'', end:r.end_time||'', location:r.location||'', memo:r.memo||'' };
+}
+function projectToDb(p){
+  return { id:p.id, customer_id:p.customerId||null, name:p.name, stage:p.stage, amount:p.amount||0, memo:p.memo||null };
+}
+function projectFromDb(r){
+  return { id:r.id, customerId:r.customer_id||null, name:r.name, stage:r.stage, amount:r.amount||0, memo:r.memo||'' };
+}
+
+async function syncTable(table, localArr, toDb){
   try{
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if(!raw) return false;
-    const obj = JSON.parse(raw);
-    state.customers = obj.customers || [];
-    state.events = obj.events || [];
-    state.projects = obj.projects || [];
+    const rows = localArr.map(toDb);
+    if(rows.length){
+      const { error } = await sb.from(table).upsert(rows);
+      if(error){ console.error(table+' 저장 오류', error); return; }
+    }
+    const { data: serverRows, error: selErr } = await sb.from(table).select('id');
+    if(!selErr && serverRows){
+      const localIds = new Set(localArr.map(r=>r.id));
+      const toDelete = serverRows.filter(r=>!localIds.has(r.id)).map(r=>r.id);
+      if(toDelete.length){ await sb.from(table).delete().in('id', toDelete); }
+    }
+  }catch(e){ console.error(table+' 동기화 실패', e); }
+}
+
+/* ============ Persistence (Supabase 서버 저장) ============ */
+async function save(){
+  await Promise.all([
+    syncTable('customers', state.customers, customerToDb),
+    syncTable('events', state.events, eventToDb),
+    syncTable('projects', state.projects, projectToDb),
+  ]);
+}
+async function load(){
+  try{
+    const [r1, r2, r3] = await Promise.all([
+      sb.from('customers').select('*').order('created_at', {ascending:false}),
+      sb.from('events').select('*'),
+      sb.from('projects').select('*').order('created_at', {ascending:false}),
+    ]);
+    if(r1.error || r2.error || r3.error){
+      console.error('불러오기 실패', r1.error, r2.error, r3.error);
+      return false;
+    }
+    state.customers = (r1.data||[]).map(customerFromDb);
+    state.events = (r2.data||[]).map(eventFromDb);
+    state.projects = (r3.data||[]).map(projectFromDb);
     return true;
-  }catch(e){ return false; }
+  }catch(e){ console.error(e); return false; }
 }
 function seedIfEmpty(){
   if(state.customers.length || state.events.length || state.projects.length) return;
@@ -705,9 +847,8 @@ function renderProjects(){
       items.forEach(p=>{
         const cust = customerById(p.customerId);
         html += '<div class="kcard" draggable="true" data-project="'+p.id+'">'+
-          '<div class="kcard-cust">'+escapeHtml(cust?cust.name:'(고객 미지정)')+'</div>'+
           '<div class="kcard-name">'+escapeHtml(p.name)+'</div>'+
-          (p.amount? '<div class="kcard-amt">₩ '+won(p.amount)+'</div>' : '')+
+          '<div class="kcard-cust">'+escapeHtml(cust?cust.name:'(고객 미지정)')+(cust&&cust.phone?' · '+escapeHtml(cust.phone):'')+'</div>'+
         '</div>';
       });
     }
@@ -825,13 +966,20 @@ function openCustomerModal(id){
       '<div class="modal">'+
         '<button class="modal-close" id="modal-close">×</button>'+
         '<h2>'+(c?'고객 정보 수정':'새 고객 등록')+'</h2>'+
-        '<div class="field"><label>이름</label><input type="text" id="f-name" value="'+escapeHtml(c?c.name:'')+'" placeholder="고객 성함"></div>'+
+        '<div class="field"><label>이름 <span class="req">*필수</span></label><input type="text" id="f-name" value="'+escapeHtml(c?c.name:'')+'" placeholder="고객 성함"></div>'+
         '<div class="field-row">'+
-          '<div class="field"><label>연락처</label><input type="text" id="f-phone" value="'+escapeHtml(c?c.phone||'':'')+'" placeholder="010-0000-0000"></div>'+
+          '<div class="field"><label>연락처 <span class="req">*필수</span></label><input type="text" id="f-phone" value="'+escapeHtml(c?c.phone||'':'')+'" placeholder="010-0000-0000"></div>'+
           '<div class="field"><label>상태</label><select id="f-status">'+statusOptions+'</select></div>'+
         '</div>'+
-        '<div class="field"><label>주소</label><input type="text" id="f-address" value="'+escapeHtml(c?c.address||'':'')+'"></div>'+
-        '<div class="field"><label>유입경로</label><input type="text" id="f-source" value="'+escapeHtml(c?c.source||'':'')+'" placeholder="예: 네이버 블로그, 지인 소개"></div>'+
+        '<div class="field"><label>현장주소 <span class="req">*필수</span></label><input type="text" id="f-address" value="'+escapeHtml(c?c.address||'':'')+'" placeholder="예: 서울 강동구 암사동 613-2 롯데캐슬 105동 1203호"></div>'+
+        '<div class="field-row">'+
+          '<div class="field"><label>이메일</label><input type="email" id="f-email" value="'+escapeHtml(c?c.email||'':'')+'" placeholder="선택 입력"></div>'+
+          '<div class="field"><label>유입경로</label><input type="text" id="f-source" value="'+escapeHtml(c?c.source||'':'')+'" placeholder="예: 네이버 블로그, 지인 소개"></div>'+
+        '</div>'+
+        '<div class="field-row">'+
+          '<div class="field"><label>현장 비밀번호</label><input type="text" id="f-site-pw" value="'+escapeHtml(c?c.sitePassword||'':'')+'" placeholder="도어락 비밀번호 등"></div>'+
+          '<div class="field"><label>1층 출입 비밀번호</label><input type="text" id="f-entrance-pw" value="'+escapeHtml(c?c.entrancePassword||'':'')+'" placeholder="공동현관 비밀번호"></div>'+
+        '</div>'+
         '<div class="field"><label>메모</label><textarea id="f-memo">'+escapeHtml(c?c.memo||'':'')+'</textarea></div>'+
         '<div class="modal-actions">'+
           (c? '<button class="btn btn-danger" id="btn-delete">삭제</button>':'')+
@@ -843,16 +991,29 @@ function openCustomerModal(id){
   bindModalClose();
   document.getElementById('btn-save').addEventListener('click', ()=>{
     const name = document.getElementById('f-name').value.trim();
+    const phone = document.getElementById('f-phone').value.trim();
+    const address = document.getElementById('f-address').value.trim();
     if(!name){ alert('이름을 입력해 주세요.'); return; }
+    if(!phone){ alert('연락처를 입력해 주세요.'); return; }
+    if(!address){ alert('현장주소를 입력해 주세요.'); return; }
     const data = {
-      name,
-      phone: document.getElementById('f-phone').value.trim(),
+      name, phone, address,
       status: parseInt(document.getElementById('f-status').value,10),
-      address: document.getElementById('f-address').value.trim(),
+      email: document.getElementById('f-email').value.trim(),
       source: document.getElementById('f-source').value.trim(),
+      sitePassword: document.getElementById('f-site-pw').value.trim(),
+      entrancePassword: document.getElementById('f-entrance-pw').value.trim(),
       memo: document.getElementById('f-memo').value.trim(),
     };
-    if(c){ Object.assign(c, data); } else { state.customers.push(Object.assign({id:uid('c'), createdAt:new Date().toISOString()}, data)); }
+    if(c){
+      Object.assign(c, data);
+    } else {
+      const newCustomer = Object.assign({id:uid('c'), createdAt:new Date().toISOString()}, data);
+      state.customers.push(newCustomer);
+      // 주소 기반으로 프로젝트명을 자동 생성해서 총괄 리스트에 함께 등록 (이름은 언제든 수정 가능)
+      const autoName = generateProjectName(newCustomer.address) || (newCustomer.name + ' 리모델링');
+      state.projects.push({ id:uid('p'), customerId:newCustomer.id, name:autoName, stage:1, amount:0, memo:'' });
+    }
     save(); closeModal();
     if(state.view==='customers') renderCustomers(); else renderMain();
   });
@@ -941,7 +1102,10 @@ function openCustomerDetail(id){
       '<span class="tag tag-'+c.status+'">'+statusLabel(c.status)+'</span>'+
       '<div class="detail-name">'+escapeHtml(c.name)+'</div>'+
       '<div class="detail-row"><span class="k">연락처</span><span class="v">'+escapeHtml(c.phone||'-')+'</span></div>'+
-      '<div class="detail-row"><span class="k">주소</span><span class="v">'+escapeHtml(c.address||'-')+'</span></div>'+
+      '<div class="detail-row"><span class="k">현장주소</span><span class="v">'+escapeHtml(c.address||'-')+'</span></div>'+
+      (c.email? '<div class="detail-row"><span class="k">이메일</span><span class="v">'+escapeHtml(c.email)+'</span></div>' : '')+
+      (c.sitePassword? '<div class="detail-row"><span class="k">현장 비밀번호</span><span class="v">'+escapeHtml(c.sitePassword)+'</span></div>' : '')+
+      (c.entrancePassword? '<div class="detail-row"><span class="k">1층 출입 비밀번호</span><span class="v">'+escapeHtml(c.entrancePassword)+'</span></div>' : '')+
       '<div class="detail-row"><span class="k">유입경로</span><span class="v">'+escapeHtml(c.source||'-')+'</span></div>'+
       '<div class="detail-row"><span class="k">등록일</span><span class="v">'+(c.createdAt?c.createdAt.slice(0,10):'-')+'</span></div>';
   if(c.memo){ html += '<div class="detail-section-title">메모</div><div class="detail-memo">'+escapeHtml(c.memo)+'</div>'; }
@@ -969,12 +1133,16 @@ function openCustomerDetail(id){
 function closeDetail(){ $detailRoot.innerHTML = ''; }
 
 /* ============ Init ============ */
-if(currentUser()){
-  bootApp();
-} else {
+(async function initAuth(){
   document.getElementById('login-screen').style.display = 'flex';
-}
+  const { data: { session } } = await sb.auth.getSession();
+  if(session && session.user){
+    await checkApprovalAndBoot(session.user);
+  }
+})();
 document.getElementById('login-btn').addEventListener('click', attemptLogin);
+document.getElementById('signup-btn').addEventListener('click', attemptSignup);
+document.getElementById('pending-logout-btn').addEventListener('click', function(){ sb.auth.signOut(); showLoginForm(); });
 document.getElementById('login-pw').addEventListener('keydown', function(e){ if(e.key==='Enter') attemptLogin(); });
 document.getElementById('login-id').addEventListener('keydown', function(e){ if(e.key==='Enter') document.getElementById('login-pw').focus(); });
 
