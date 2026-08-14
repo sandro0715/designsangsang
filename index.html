@@ -94,6 +94,8 @@ input,select,textarea{font-family:inherit;}
 .login-input{width:100%; padding:10px 12px; border:1.3px solid var(--line-strong); border-radius:8px; font-size:13.5px; background:var(--surface-2); color:var(--ink);}
 .login-input:focus{outline:none; border-color:var(--accent);}
 .login-error{margin-top:12px; font-size:12px; color:var(--danger); background:var(--danger-soft); padding:8px 10px; border-radius:6px;}
+.login-success{margin-top:12px; font-size:12px; color:#3B6B3F; background:#E3EFE3; padding:8px 10px; border-radius:6px;}
+.link-btn{display:block; width:100%; margin-top:10px; background:none; border:none; color:var(--ink-dim); font-size:12px; text-decoration:underline; cursor:pointer; padding:4px;}
 .login-submit{width:100%; margin-top:18px; padding:11px; font-size:13.5px;}
 .login-note{margin-top:16px; font-size:10.5px; line-height:1.5; color:var(--ink-faint);}
 .snav-user{font-size:11.5px; color:#F2EEDF; opacity:.85; margin-bottom:6px;}
@@ -297,12 +299,33 @@ table.list tbody tr:hover{background:var(--surface-2);}
     <div id="login-error" class="login-error" style="display:none;"></div>
     <button id="login-btn" class="btn btn-primary login-submit">로그인</button>
     <button id="signup-btn" class="btn btn-ghost login-submit" style="margin-top:8px;">가입 신청</button>
+    <button id="forgot-link" class="link-btn">비밀번호를 잊으셨나요?</button>
     <div class="login-note">가입 신청 후 관리자 승인이 완료되면 로그인할 수 있어요.</div>
   </div>
   <div class="login-box" id="login-box-pending" style="display:none;">
     <div class="brand-name" style="color:var(--ink);">승인 대기중</div>
     <div class="login-sub" id="pending-msg">가입 신청이 접수됐어요. 관리자(윤상돈)가 승인하면 접속할 수 있어요.</div>
     <button id="pending-logout-btn" class="btn btn-ghost login-submit">다시 로그인 화면으로</button>
+  </div>
+  <div class="login-box" id="login-box-forgot" style="display:none;">
+    <div class="brand-name" style="color:var(--ink);">비밀번호 재설정</div>
+    <div class="login-sub">가입하신 이메일을 입력하시면 재설정 링크를 보내드려요.</div>
+    <label class="login-label">이메일</label>
+    <input type="email" id="forgot-email" class="login-input" placeholder="이메일 주소">
+    <div id="forgot-error" class="login-error" style="display:none;"></div>
+    <div id="forgot-success" class="login-success" style="display:none;">메일을 보냈어요. 받은편지함(스팸함도 확인)을 확인해주세요.</div>
+    <button id="forgot-send-btn" class="btn btn-primary login-submit">재설정 메일 보내기</button>
+    <button id="forgot-back-btn" class="btn btn-ghost login-submit" style="margin-top:8px;">로그인 화면으로</button>
+  </div>
+  <div class="login-box" id="login-box-newpw" style="display:none;">
+    <div class="brand-name" style="color:var(--ink);">새 비밀번호 설정</div>
+    <div class="login-sub">새로 쓰실 비밀번호를 입력해주세요 (6자 이상).</div>
+    <label class="login-label">새 비밀번호</label>
+    <input type="password" id="newpw-1" class="login-input" placeholder="새 비밀번호">
+    <label class="login-label">새 비밀번호 확인</label>
+    <input type="password" id="newpw-2" class="login-input" placeholder="다시 입력">
+    <div id="newpw-error" class="login-error" style="display:none;"></div>
+    <button id="newpw-save-btn" class="btn btn-primary login-submit">비밀번호 저장</button>
   </div>
 </div>
 <div id="app" style="display:none;">
@@ -343,9 +366,56 @@ function showPendingScreen(msg){
 function showLoginForm(){
   document.getElementById('login-box-form').style.display = 'block';
   document.getElementById('login-box-pending').style.display = 'none';
+  document.getElementById('login-box-forgot').style.display = 'none';
+  document.getElementById('login-box-newpw').style.display = 'none';
   document.getElementById('login-id').value = '';
   document.getElementById('login-pw').value = '';
   hideLoginError();
+}
+function showForgotScreen(){
+  document.getElementById('login-box-form').style.display = 'none';
+  document.getElementById('login-box-forgot').style.display = 'block';
+  document.getElementById('forgot-email').value = document.getElementById('login-id').value.trim();
+  document.getElementById('forgot-error').style.display = 'none';
+  document.getElementById('forgot-success').style.display = 'none';
+}
+async function sendForgotEmail(){
+  const email = document.getElementById('forgot-email').value.trim();
+  const err = document.getElementById('forgot-error');
+  err.style.display = 'none';
+  if(!email){ err.textContent = '이메일을 입력해주세요.'; err.style.display = 'block'; return; }
+  const btn = document.getElementById('forgot-send-btn');
+  btn.disabled = true; btn.textContent = '보내는 중…';
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + window.location.pathname });
+  btn.disabled = false; btn.textContent = '재설정 메일 보내기';
+  if(error){
+    err.textContent = error.message.includes('rate limit') ? '메일을 너무 여러 번 요청했어요. 1시간 후 다시 시도해주세요.' : error.message;
+    err.style.display = 'block';
+    return;
+  }
+  document.getElementById('forgot-success').style.display = 'block';
+}
+function showNewPasswordScreen(){
+  document.getElementById('login-box-form').style.display = 'none';
+  document.getElementById('login-box-pending').style.display = 'none';
+  document.getElementById('login-box-forgot').style.display = 'none';
+  document.getElementById('login-box-newpw').style.display = 'block';
+}
+async function saveNewPassword(){
+  const pw1 = document.getElementById('newpw-1').value;
+  const pw2 = document.getElementById('newpw-2').value;
+  const err = document.getElementById('newpw-error');
+  err.style.display = 'none';
+  if(pw1.length < 6){ err.textContent = '비밀번호는 6자 이상이어야 해요.'; err.style.display = 'block'; return; }
+  if(pw1 !== pw2){ err.textContent = '두 비밀번호가 서로 달라요.'; err.style.display = 'block'; return; }
+  const btn = document.getElementById('newpw-save-btn');
+  btn.disabled = true; btn.textContent = '저장 중…';
+  const { error } = await sb.auth.updateUser({ password: pw1 });
+  btn.disabled = false; btn.textContent = '비밀번호 저장';
+  if(error){ err.textContent = error.message; err.style.display = 'block'; return; }
+  alert('비밀번호가 변경됐어요. 다시 로그인해주세요.');
+  await sb.auth.signOut();
+  showLoginForm();
 }
 
 async function attemptLogin(){
@@ -1133,16 +1203,25 @@ function openCustomerDetail(id){
 function closeDetail(){ $detailRoot.innerHTML = ''; }
 
 /* ============ Init ============ */
+sb.auth.onAuthStateChange(function(event, session){
+  if(event === 'PASSWORD_RECOVERY'){
+    showNewPasswordScreen();
+  }
+});
 (async function initAuth(){
   document.getElementById('login-screen').style.display = 'flex';
   const { data: { session } } = await sb.auth.getSession();
-  if(session && session.user){
+  if(session && session.user && !window.location.hash.includes('type=recovery')){
     await checkApprovalAndBoot(session.user);
   }
 })();
 document.getElementById('login-btn').addEventListener('click', attemptLogin);
 document.getElementById('signup-btn').addEventListener('click', attemptSignup);
 document.getElementById('pending-logout-btn').addEventListener('click', function(){ sb.auth.signOut(); showLoginForm(); });
+document.getElementById('forgot-link').addEventListener('click', showForgotScreen);
+document.getElementById('forgot-send-btn').addEventListener('click', sendForgotEmail);
+document.getElementById('forgot-back-btn').addEventListener('click', showLoginForm);
+document.getElementById('newpw-save-btn').addEventListener('click', saveNewPassword);
 document.getElementById('login-pw').addEventListener('keydown', function(e){ if(e.key==='Enter') attemptLogin(); });
 document.getElementById('login-id').addEventListener('keydown', function(e){ if(e.key==='Enter') document.getElementById('login-pw').focus(); });
 
