@@ -565,12 +565,11 @@ table.items tbody tr.has-qty:hover{background:#F8F0DC;}
 </head>
 <body>
 <div id="app">
-  <header class="topbar">
+  <header class="topbar" id="app-topbar">
     <span class="brand-mark">DESIGN SANGSANG</span>
     <h1>인테리어 공사 견적 계산기</h1>
-    <div class="mode-switch">
+    <div class="mode-switch" id="mode-switch-bar">
       <button class="mode-btn" data-mode-btn="quote">견적 작성</button>
-      <button class="mode-btn" data-mode-btn="admin" id="mode-btn-admin">설정</button>
       <button class="mode-btn" data-mode-btn="saved">저장된 견적</button>
     </div>
     <span class="sub">디자인상상 · 실내 인테리어 공사 견적서 v2608</span>
@@ -714,17 +713,74 @@ function setPriceField(group, i, field, value){
   const k = group+"|"+i;
   const cur = state.priceOverride[k] || {};
   state.priceOverride[k] = Object.assign({}, cur, {[field]: value});
+  savePriceOverrideToServer(group, i);
 }
 function resetGroupPricing(group){
+  const keysToDelete = [];
   Object.keys(state.priceOverride).forEach(k=>{
-    if(k.startsWith(group+"|")) delete state.priceOverride[k];
+    if(k.startsWith(group+"|")){ delete state.priceOverride[k]; keysToDelete.push(k); }
   });
   delete state.marginOverride[group];
+  if(keysToDelete.length) sb.from('price_overrides').delete().in('item_key', keysToDelete).then(()=>{});
+  sb.from('category_margins').delete().eq('group_id', group).then(()=>{});
 }
 function resetAllPricing(){
   state.priceOverride = {};
   state.marginOverride = {};
+  sb.from('price_overrides').delete().neq('item_key', '').then(()=>{});
+  sb.from('category_margins').delete().neq('group_id', '').then(()=>{});
 }
+
+/* ---- 단가·마진 설정: 서버(Supabase) 저장 ---- */
+function priceOverrideToDbRow(group, i){
+  const k = group+"|"+i;
+  const ov = state.priceOverride[k] || {};
+  return {
+    item_key: k,
+    material: ov.mat !== undefined ? ov.mat : null,
+    labor: ov.labor !== undefined ? ov.labor : null,
+    expense: ov.exp !== undefined ? ov.exp : null,
+    margin: ov.mo !== undefined ? ov.mo : null,
+    name: ov.n !== undefined ? ov.n : null,
+    spec: ov.s !== undefined ? ov.s : null,
+    unit: ov.u !== undefined ? ov.u : null,
+  };
+}
+function savePriceOverrideToServer(group, i){
+  const row = priceOverrideToDbRow(group, i);
+  sb.from('price_overrides').upsert(row).then(({error})=>{ if(error) console.error('단가 저장 실패', error); });
+}
+function saveCategoryMarginToServer(group){
+  const v = state.marginOverride[group];
+  if(v === undefined){
+    sb.from('category_margins').delete().eq('group_id', group).then(()=>{});
+    return;
+  }
+  sb.from('category_margins').upsert({ group_id: group, margin: v }).then(({error})=>{ if(error) console.error('마진 저장 실패', error); });
+}
+async function loadLivePricing(){
+  const [ovRes, mgRes] = await Promise.all([
+    sb.from('price_overrides').select('*'),
+    sb.from('category_margins').select('*'),
+  ]);
+  const priceOverride = {};
+  (ovRes.data||[]).forEach(r=>{
+    const o = {};
+    if(r.material !== null) o.mat = r.material;
+    if(r.labor !== null) o.labor = r.labor;
+    if(r.expense !== null) o.exp = r.expense;
+    if(r.margin !== null) o.mo = r.margin;
+    if(r.name !== null) o.n = r.name;
+    if(r.spec !== null) o.s = r.spec;
+    if(r.unit !== null) o.u = r.unit;
+    priceOverride[r.item_key] = o;
+  });
+  const marginOverride = {};
+  (mgRes.data||[]).forEach(r=>{ marginOverride[r.group_id] = r.margin; });
+  state.priceOverride = priceOverride;
+  state.marginOverride = marginOverride;
+}
+
 
 /* ============ Quantity / custom item state ============ */
 function itemKey(group, i){ return group+"|"+i; }
@@ -831,7 +887,6 @@ function saveDraft(){
   try{
     localStorage.setItem(STORAGE_DRAFT, JSON.stringify({
       qty: state.qty, custom: state.custom,
-      priceOverride: state.priceOverride, marginOverride: state.marginOverride,
       meta: state.meta, selected: state.selected, phase: state.phase, flow: state.flow, selectIdx: state.selectIdx, catView: state.catView,
       customerId: state.customerId, currentQuoteId: state.currentQuoteId,
     }));
@@ -844,8 +899,6 @@ function loadDraft(){
     const obj = JSON.parse(raw);
     state.qty = obj.qty || {};
     state.custom = obj.custom || {};
-    state.priceOverride = obj.priceOverride || {};
-    state.marginOverride = obj.marginOverride || {};
     state.meta = Object.assign(state.meta, obj.meta || {});
     state.selected = obj.selected || {};
     state.phase = obj.phase || (Object.keys(state.qty).length ? 'build' : 'picker');
@@ -1345,8 +1398,9 @@ function bindMainEvents(){
     $main.querySelectorAll('[data-role="cat-margin"]').forEach(el=>{
       el.addEventListener('input', e=>{
         const group = e.target.dataset.group;
-        const v = e.target.value === '' ? CATALOG[group].margin : Number(e.target.value)/100;
-        state.marginOverride[group] = v;
+        if(e.target.value === ''){ delete state.marginOverride[group]; }
+        else { state.marginOverride[group] = Number(e.target.value)/100; }
+        saveCategoryMarginToServer(group);
         refreshGroupFinalPrices(group);
         renderNav(); renderSummaryOnly();
       });
@@ -1539,13 +1593,10 @@ function bindMeta(){
   });
 }
 let CURRENT_ROLE = null;
+let EMBED_ADMIN_MODE = false; // index.html "설정" 탭에서 iframe으로 열렸을 때 true
 function bindModeSwitch(){
   $modeBtns.forEach(btn=>{
     btn.addEventListener('click', ()=>{
-      if(btn.dataset.modeBtn === 'admin' && CURRENT_ROLE !== 'admin'){
-        alert('설정은 관리자만 접근할 수 있어요.');
-        return;
-      }
       state.mode = btn.dataset.modeBtn;
       renderAll();
       window.scrollTo(0,0);
@@ -1559,12 +1610,15 @@ async function loadCurrentRoleAndApply(){
     const { data } = await sb.from('profiles').select('role').eq('id', user.id).single();
     CURRENT_ROLE = data ? data.role : null;
   }catch(e){ CURRENT_ROLE = null; }
-  const adminBtn = document.getElementById('mode-btn-admin');
-  if(adminBtn) adminBtn.style.display = (CURRENT_ROLE==='admin') ? '' : 'none';
-  if(state.mode === 'admin' && CURRENT_ROLE !== 'admin'){
-    state.mode = 'quote';
-    renderAll();
+  if(EMBED_ADMIN_MODE){
+    if(CURRENT_ROLE === 'admin'){
+      state.mode = 'admin';
+    } else {
+      $main.innerHTML = '<div class="empty-note" style="margin:30px;">관리자만 접근할 수 있는 화면이에요.</div>';
+      return;
+    }
   }
+  renderAll();
 }
 
 /* ============ Print view ============ */
@@ -1626,13 +1680,25 @@ function buildPrintView(){
   const customerId = params.get('customer_id');
   const customerName = params.get('customer_name');
   const quoteId = params.get('quote_id');
+  EMBED_ADMIN_MODE = params.get('mode') === 'admin';
 
   bindMeta();
   bindModeSwitch();
-  loadCurrentRoleAndApply();
+  if(EMBED_ADMIN_MODE){
+    const topbar = document.getElementById('app-topbar');
+    if(topbar) topbar.style.display = 'none';
+  }
+  await loadLivePricing(); // 항상 최신 단가·마진을 서버에서 먼저 불러옴
+
+  if(EMBED_ADMIN_MODE){
+    // index.html "설정" 탭에서 열린 경우: 관리자 확인 후 설정 화면만 보여줌 (내부에서 renderAll 처리)
+    await loadCurrentRoleAndApply();
+    return;
+  }
+  loadCurrentRoleAndApply(); // 일반 화면에서는 백그라운드로 등급만 확인 (지금은 UI에 영향 없음)
 
   if(quoteId){
-    // 특정 저장된 견적을 직접 불러오는 경우 (localStorage 임시 작업본은 무시)
+    // 특정 저장된 견적을 직접 불러오는 경우 (그 견적 저장 당시의 단가로 덮어씀 - 아래 loadSnapshot에서 처리)
     state.customerId = customerId || null;
     state.customerName = customerName ? decodeURIComponent(customerName) : null;
     await loadSnapshot(quoteId); // 내부에서 renderAll() 호출함
