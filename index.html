@@ -256,6 +256,10 @@ table.list tbody tr:hover{background:var(--surface-2);}
 }
 .field textarea{resize:vertical; min-height:56px;}
 .field-row{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+.phone-input-row{display:flex; align-items:center; gap:6px;}
+.phone-prefix{font-size:13.5px; font-weight:700; color:var(--ink); background:var(--surface-2); border:1.3px solid var(--line-strong); border-radius:8px; padding:9px 10px;}
+.phone-dash{color:var(--ink-faint); font-weight:700;}
+.phone-part{width:100%; min-width:0; text-align:center; letter-spacing:.05em;}
 .modal-actions{display:flex; gap:8px; margin-top:18px;}
 .modal-actions .btn{flex:1;}
 .modal-close{
@@ -1089,9 +1093,17 @@ function openEventModal(id, prefillDate){
 }
 
 /* ============ Customer modal (create/edit) ============ */
+function parsePhoneParts(phone){
+  const digits = (phone||'').replace(/\D/g,'');
+  if(digits.length>=8){
+    return { p2: digits.slice(-8,-4), p3: digits.slice(-4) };
+  }
+  return { p2:'', p3:'' };
+}
 function openCustomerModal(id){
   const c = id ? customerById(id) : null;
   const statusOptions = CUSTOMER_STATUSES.map(s=>'<option value="'+s.id+'" '+(c&&c.status===s.id?'selected':(!c&&s.id===1?'selected':''))+'>'+s.label+'</option>').join('');
+  const phoneParts = parsePhoneParts(c?c.phone:'');
   const html = ''+
     '<div class="modal-backdrop" id="modal-backdrop">'+
       '<div class="modal">'+
@@ -1099,7 +1111,14 @@ function openCustomerModal(id){
         '<h2>'+(c?'고객 정보 수정':'새 고객 등록')+'</h2>'+
         '<div class="field"><label>이름 <span class="req">*필수</span></label><input type="text" id="f-name" value="'+escapeHtml(c?c.name:'')+'" placeholder="고객 성함"></div>'+
         '<div class="field-row">'+
-          '<div class="field"><label>연락처 <span class="req">*필수</span></label><input type="text" id="f-phone" value="'+escapeHtml(c?c.phone||'':'')+'" placeholder="010-0000-0000"></div>'+
+          '<div class="field"><label>연락처 <span class="req">*필수</span></label>'+
+            '<div class="phone-input-row">'+
+              '<span class="phone-prefix">010</span><span class="phone-dash">-</span>'+
+              '<input type="text" id="f-phone-2" class="phone-part" maxlength="4" inputmode="numeric" placeholder="0000" value="'+escapeHtml(phoneParts.p2)+'">'+
+              '<span class="phone-dash">-</span>'+
+              '<input type="text" id="f-phone-3" class="phone-part" maxlength="4" inputmode="numeric" placeholder="0000" value="'+escapeHtml(phoneParts.p3)+'">'+
+            '</div>'+
+          '</div>'+
           '<div class="field"><label>상태</label><select id="f-status">'+statusOptions+'</select></div>'+
         '</div>'+
         '<div class="field"><label>현장주소 <span class="req">*필수</span></label><input type="text" id="f-address" value="'+escapeHtml(c?c.address||'':'')+'" placeholder="예: 서울 강동구 암사동 613-2 롯데캐슬 105동 1203호"></div>'+
@@ -1120,13 +1139,23 @@ function openCustomerModal(id){
     '</div>';
   $modalRoot.innerHTML = html;
   bindModalClose();
+  const p2El = document.getElementById('f-phone-2');
+  const p3El = document.getElementById('f-phone-3');
+  [p2El, p3El].forEach(el=>{
+    el.addEventListener('input', ()=>{
+      el.value = el.value.replace(/\D/g,'').slice(0,4);
+      if(el===p2El && el.value.length===4) p3El.focus();
+    });
+  });
   document.getElementById('btn-save').addEventListener('click', ()=>{
     const name = document.getElementById('f-name').value.trim();
-    const phone = document.getElementById('f-phone').value.trim();
+    const p2 = p2El.value.trim();
+    const p3 = p3El.value.trim();
     const address = document.getElementById('f-address').value.trim();
     if(!name){ alert('이름을 입력해 주세요.'); return; }
-    if(!phone){ alert('연락처를 입력해 주세요.'); return; }
+    if(p2.length!==4 || p3.length!==4){ alert('연락처 뒷자리 8자리를 모두 입력해 주세요. (예: 1234 / 5678)'); return; }
     if(!address){ alert('현장주소를 입력해 주세요.'); return; }
+    const phone = '010-'+p2+'-'+p3;
     const data = {
       name, phone, address,
       status: parseInt(document.getElementById('f-status').value,10),
@@ -1224,6 +1253,8 @@ function closeModal(){ $modalRoot.innerHTML = ''; }
 /* ============ Customer detail panel ============ */
 function goToEstimateForCustomer(c, quoteId){
   let qs = '?customer_id='+encodeURIComponent(c.id)+'&customer_name='+encodeURIComponent(c.name);
+  const proj = state.projects.find(p=>p.customerId===c.id);
+  if(proj) qs += '&project_name='+encodeURIComponent(proj.name);
   if(quoteId) qs += '&quote_id='+encodeURIComponent(quoteId);
   state.estimateQuery = qs;
   state.view = 'estimate';
