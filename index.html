@@ -1210,8 +1210,25 @@ sb.auth.onAuthStateChange(function(event, session){
 });
 (async function initAuth(){
   document.getElementById('login-screen').style.display = 'flex';
+  // 비밀번호 재설정 링크는 두 가지 형태로 올 수 있어요: #...type=recovery (구형) 또는 ?code=... (신형/PKCE)
+  const isRecoveryHash = window.location.hash.includes('type=recovery');
+  const urlCode = new URLSearchParams(window.location.search).get('code');
+  if(urlCode){
+    try{
+      const { data, error } = await sb.auth.exchangeCodeForSession(window.location.href);
+      window.history.replaceState({}, document.title, window.location.pathname);
+      if(!error && data && data.session){
+        showNewPasswordScreen();
+        return;
+      }
+    }catch(e){ /* 아래 일반 로그인 흐름으로 계속 진행 */ }
+  }
   const { data: { session } } = await sb.auth.getSession();
-  if(session && session.user && !window.location.hash.includes('type=recovery')){
+  if(isRecoveryHash){
+    showNewPasswordScreen();
+    return;
+  }
+  if(session && session.user){
     await checkApprovalAndBoot(session.user);
   }
 })();
