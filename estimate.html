@@ -516,6 +516,48 @@ table.items tbody tr.has-qty:hover{background:#F8F0DC;}
   .custom-add-grid{grid-template-columns:1fr 1fr;}
 }
 
+/* ===== 항목 선택(체크리스트) 화면 ===== */
+.picker-wrap{max-width:640px; margin:40px auto; text-align:center;}
+.picker-title{font-size:20px; font-weight:800; margin-bottom:26px;}
+.picker-cards{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
+.picker-card{
+  background:var(--surface); border:1.5px solid var(--line-strong); border-radius:14px;
+  padding:26px 20px; text-align:left; cursor:pointer; transition:.15s;
+}
+.picker-card:hover{border-color:var(--accent); background:var(--accent-soft);}
+.picker-ico{font-size:28px; margin-bottom:10px;}
+.picker-name{font-size:15px; font-weight:800; margin-bottom:8px;}
+.picker-desc{font-size:12.5px; color:var(--ink-dim); line-height:1.55;}
+
+.select-wrap{padding-bottom:90px;}
+.select-head{margin-bottom:18px;}
+.select-head h2{font-size:17px; font-weight:800; margin:4px 0 4px;}
+.select-desc{font-size:12px; color:var(--ink-dim);}
+.select-progress{font-size:11px; color:var(--accent-deep); font-weight:700; text-transform:uppercase; letter-spacing:.04em;}
+.select-cat-block{margin-bottom:26px;}
+.select-cat-title{font-size:12.5px; font-weight:800; color:var(--ink); background:var(--surface-2); padding:8px 12px; border-radius:8px; margin-bottom:8px;}
+.check-list{display:flex; flex-direction:column; gap:2px;}
+.check-row{
+  display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:7px; cursor:pointer; font-size:13px;
+}
+.check-row:hover{background:var(--surface-2);}
+.check-row.checked{background:var(--accent-soft);}
+.check-row input{width:16px; height:16px; flex:none; accent-color:var(--accent);}
+.check-name{flex:1; display:flex; flex-direction:column;}
+.check-spec{font-size:11px; color:var(--ink-faint); font-weight:400;}
+.check-unit{font-size:11px; color:var(--ink-faint); flex:none;}
+.select-footer{
+  position:fixed; left:0; right:0; bottom:0; z-index:20;
+  background:var(--surface); border-top:1.3px solid var(--line-strong);
+  padding:14px 24px; display:flex; align-items:center; justify-content:flex-end; gap:14px;
+  box-shadow:0 -4px 16px rgba(0,0,0,.06);
+}
+.select-count{margin-right:auto; font-size:12.5px; font-weight:700; color:var(--ink-dim);}
+.nav-placeholder{padding:20px 14px; font-size:11.5px; color:var(--ink-faint); line-height:1.6; text-align:center;}
+.empty-note{font-size:12.5px; color:var(--ink-faint); background:var(--surface-2); padding:14px 16px; border-radius:8px;}
+.consult-actions{display:flex; align-items:center; gap:12px; margin-top:22px; padding-top:18px; border-top:1px solid var(--line);}
+.consult-done-note{font-size:12px; color:var(--ink-faint);}
+
 </style>
 </head>
 <body>
@@ -525,7 +567,7 @@ table.items tbody tr.has-qty:hover{background:#F8F0DC;}
     <h1>인테리어 공사 견적 계산기</h1>
     <div class="mode-switch">
       <button class="mode-btn" data-mode-btn="quote">견적 작성</button>
-      <button class="mode-btn" data-mode-btn="admin">단가·마진 관리</button>
+      <button class="mode-btn" data-mode-btn="admin">단가 설정</button>
       <button class="mode-btn" data-mode-btn="saved">저장된 견적</button>
     </div>
     <span class="sub">디자인상상 · 실내 인테리어 공사 견적서 v2608</span>
@@ -603,6 +645,11 @@ const state = {
   priceOverride: {}, // key `${group}|${i}` -> {mat?,labor?,exp?,mo?}  (only edited fields)
   marginOverride: {},// key group -> number (0~1), category-level margin override
   meta: { project:"", customer:"", date: new Date().toISOString().slice(0,10) },
+  selected: {},       // key `${group}|${i}` -> true  (체크리스트에서 선택된 항목)
+  phase: "picker",    // "picker" | "select" | "build"  (견적 작성 진행 단계)
+  flow: null,         // "solo" | "consult"  (혼자 작업 / 고객 상담 모드)
+  selectIdx: 0,       // (미사용 - 이전 버전 호환용)
+  catView: {},        // 고객 상담 모드: key cid -> "check" | "qty"  (공종별로 지금 체크리스트 단계인지 수량 입력 단계인지)
 };
 let customSeq = 1;
 
@@ -666,6 +713,28 @@ function resetAllPricing(){
 }
 
 /* ============ Quantity / custom item state ============ */
+function itemKey(group, i){ return group+"|"+i; }
+function isItemSelected(group, i){ return !!state.selected[itemKey(group,i)]; }
+function toggleItemSelected(group, i){
+  const k = itemKey(group,i);
+  const next = !state.selected[k];
+  if(next){ state.selected[k] = true; }
+  else{ delete state.selected[k]; setQty(group, i, {q:0, opt:false}); }
+}
+function selectedCountAll(){ return Object.keys(state.selected).length; }
+function backfillSelectedFromQty(){
+  Object.keys(state.qty).forEach(k=>{
+    if(state.qty[k] && state.qty[k].q > 0) state.selected[k] = true;
+  });
+}
+function groupsForCat(cid){
+  return cid==="5" ? [["5a",CATALOG["5a"].label],["5b",CATALOG["5b"].label]] : [[CAT_GROUPS[cid][0], null]];
+}
+function catItemList(group){
+  const list = [];
+  CATALOG[group].items.forEach((it,i)=>{ if(effItem(group,i).n) list.push(i); });
+  return list;
+}
 function getQty(group, i){
   const k = group+"|"+i;
   return state.qty[k] || {q:0, opt:false};
@@ -746,7 +815,7 @@ function saveDraft(){
     localStorage.setItem(STORAGE_DRAFT, JSON.stringify({
       qty: state.qty, custom: state.custom,
       priceOverride: state.priceOverride, marginOverride: state.marginOverride,
-      meta: state.meta,
+      meta: state.meta, selected: state.selected, phase: state.phase, flow: state.flow, selectIdx: state.selectIdx, catView: state.catView,
     }));
   }catch(e){ /* storage unavailable (e.g. private mode) -- fail silently */ }
 }
@@ -760,6 +829,12 @@ function loadDraft(){
     state.priceOverride = obj.priceOverride || {};
     state.marginOverride = obj.marginOverride || {};
     state.meta = Object.assign(state.meta, obj.meta || {});
+    state.selected = obj.selected || {};
+    state.phase = obj.phase || (Object.keys(state.qty).length ? 'build' : 'picker');
+    state.flow = obj.flow || null;
+    state.selectIdx = obj.selectIdx || 0;
+    state.catView = obj.catView || {};
+    if(state.phase === 'build' && selectedCountAll()===0) backfillSelectedFromQty();
   }catch(e){ /* ignore corrupt draft */ }
 }
 function loadSavedList(){
@@ -782,7 +857,7 @@ function saveCurrentAsSnapshot(label){
     data: {
       qty: state.qty, custom: state.custom,
       priceOverride: state.priceOverride, marginOverride: state.marginOverride,
-      meta: state.meta,
+      meta: state.meta, selected: state.selected,
     },
   };
   list.unshift(snap);
@@ -796,6 +871,10 @@ function loadSnapshot(id){
   state.priceOverride = snap.data.priceOverride || {};
   state.marginOverride = snap.data.marginOverride || {};
   state.meta = Object.assign(state.meta, snap.data.meta || {});
+  state.selected = snap.data.selected || {};
+  if(selectedCountAll()===0) backfillSelectedFromQty();
+  state.phase = 'build';
+  state.flow = state.flow || 'solo';
   state.mode = 'quote';
   renderAll();
 }
@@ -815,6 +894,10 @@ function escapeHtml(s){
 
 /* ============ Nav ============ */
 function renderNav(){
+  if(state.mode === 'quote' && state.phase !== 'build'){
+    $nav.innerHTML = '<div class="nav-placeholder">체크리스트에서 항목을 선택하면<br>여기에 공종별 목록이 나타나요.</div>';
+    return;
+  }
   const t = computeTotals();
   $nav.innerHTML = '';
   CAT_ORDER.forEach(cid=>{
@@ -829,6 +912,169 @@ function renderNav(){
 }
 
 /* ============ Quote-builder table ============ */
+function pickerHTML(){
+  return ''+
+  '<div class="picker-wrap">'+
+    '<h2 class="picker-title">견적 작성을 어떻게 시작할까요?</h2>'+
+    '<div class="picker-cards">'+
+      '<button class="picker-card" data-role="pick-solo">'+
+        '<div class="picker-ico">🗂️</div>'+
+        '<div class="picker-name">혼자 작업</div>'+
+        '<div class="picker-desc">공종별로 하나씩 체크하고 바로 수량을 입력해요. 사이드바에서 언제든 다른 공종으로 넘나들 수 있어요.</div>'+
+      '</button>'+
+      '<button class="picker-card" data-role="pick-consult">'+
+        '<div class="picker-ico">🗣️</div>'+
+        '<div class="picker-name">고객 상담 모드</div>'+
+        '<div class="picker-desc">고객과 대화하며 공종 순서대로 진행해요. 역시 언제든 지나온 공종으로 돌아갈 수 있어요.</div>'+
+      '</button>'+
+    '</div>'+
+  '</div>';
+}
+function bindPickerEvents(){
+  const solo = $main.querySelector('[data-role="pick-solo"]');
+  const consult = $main.querySelector('[data-role="pick-consult"]');
+  if(solo) solo.addEventListener('click', ()=>{
+    state.flow='solo'; state.phase='build'; state.active=CAT_ORDER[0]; state.catView={};
+    saveDraft(); renderAll(); window.scrollTo(0,0);
+  });
+  if(consult) consult.addEventListener('click', ()=>{
+    state.flow='consult'; state.phase='build'; state.active=CAT_ORDER[0]; state.catView={};
+    saveDraft(); renderAll(); window.scrollTo(0,0);
+  });
+}
+
+function checklistRowHTML(group, i){
+  const it = effItem(group, i);
+  const checked = isItemSelected(group, i);
+  return ''+
+  '<label class="check-row'+(checked?' checked':'')+'">'+
+    '<input type="checkbox" data-role="select-item" data-group="'+group+'" data-i="'+i+'" '+(checked?'checked':'')+'>'+
+    '<span class="check-name">'+escapeHtml(it.n)+(it.s?'<span class="check-spec">'+escapeHtml(it.s)+'</span>':'')+'</span>'+
+    '<span class="check-unit">'+escapeHtml(it.u||'')+'</span>'+
+  '</label>';
+}
+function checklistSectionHTML(cid, skipTitle){
+  const meta = CAT_META[cid];
+  let html = '<div class="select-cat-block">'+(skipTitle?'':'<div class="select-cat-title">CATEGORY '+meta.no+' · '+meta.title+'</div>');
+  groupsForCat(cid).forEach(([group,label])=>{
+    if(label) html += '<div class="subgroup-title">'+label+'</div>';
+    html += '<div class="check-list">'+catItemList(group).map(i=>checklistRowHTML(group,i)).join('')+'</div>';
+  });
+  html += '</div>';
+  return html;
+}
+function selectSoloHTML(){
+  let html = '<div class="select-wrap"><div class="select-head"><h2>필요한 작업을 체크해 주세요</h2><div class="select-desc">체크한 항목만 다음 화면에서 수량을 입력하게 돼요.</div></div>';
+  CAT_ORDER.forEach(cid=>{ html += checklistSectionHTML(cid); });
+  html += '</div>'+
+    '<div class="select-footer">'+
+      '<span class="select-count">'+selectedCountAll()+'개 선택됨</span>'+
+      '<button class="btn-primary" style="flex:none;padding:12px 22px;" data-role="go-build" '+(selectedCountAll()===0?'disabled':'')+'>수량 입력하기 →</button>'+
+    '</div>';
+  return html;
+}
+function selectConsultHTML(){
+  const cid = CAT_ORDER[state.selectIdx];
+  const isLast = state.selectIdx === CAT_ORDER.length-1;
+  let html = '<div class="select-wrap"><div class="select-head">'+
+    '<div class="select-progress">'+(state.selectIdx+1)+' / '+CAT_ORDER.length+' 단계</div>'+
+    '<h2>필요한 작업을 체크해 주세요</h2><div class="select-desc">고객과 상담하면서 이 공종에서 필요한 항목만 체크하세요.</div></div>';
+  html += checklistSectionHTML(cid);
+  html += '</div>'+
+    '<div class="select-footer">'+
+      '<span class="select-count">'+selectedCountAll()+'개 선택됨</span>'+
+      (state.selectIdx>0 ? '<button class="btn-secondary" style="flex:none;padding:12px 18px;" data-role="consult-prev">← 이전 공종</button>' : '')+
+      '<button class="btn-primary" style="flex:none;padding:12px 22px;" data-role="'+(isLast?'go-build':'consult-next')+'">'+(isLast?'수량 입력하기 →':'다음 공종 →')+'</button>'+
+    '</div>';
+  return html;
+}
+function bindSelectEvents(){
+  $main.querySelectorAll('[data-role="select-item"]').forEach(el=>{
+    el.addEventListener('change', e=>{
+      const group = e.target.dataset.group, i = parseInt(e.target.dataset.i,10);
+      toggleItemSelected(group, i);
+      saveDraft();
+      e.target.closest('label').classList.toggle('checked', e.target.checked);
+      const countEls = document.querySelectorAll('.select-count');
+      countEls.forEach(el2=> el2.textContent = selectedCountAll()+'개 선택됨');
+      const goBtn = document.querySelector('[data-role="go-build"]');
+      if(goBtn && state.flow==='solo') goBtn.disabled = selectedCountAll()===0;
+    });
+  });
+  const goBuild = document.querySelector('[data-role="go-build"]');
+  if(goBuild) goBuild.addEventListener('click', ()=>{
+    if(selectedCountAll()===0) return;
+    state.phase='build'; state.active = firstSelectedCat() || state.active;
+    saveDraft(); renderAll(); window.scrollTo(0,0);
+  });
+  const nextBtn = document.querySelector('[data-role="consult-next"]');
+  if(nextBtn) nextBtn.addEventListener('click', ()=>{ state.selectIdx = Math.min(CAT_ORDER.length-1, state.selectIdx+1); saveDraft(); renderAll(); window.scrollTo(0,0); });
+  const prevBtn = document.querySelector('[data-role="consult-prev"]');
+  if(prevBtn) prevBtn.addEventListener('click', ()=>{ state.selectIdx = Math.max(0, state.selectIdx-1); saveDraft(); renderAll(); window.scrollTo(0,0); });
+}
+function firstSelectedCat(){
+  for(const cid of CAT_ORDER){
+    for(const [group] of groupsForCat(cid)){
+      if(catItemList(group).some(i=>isItemSelected(group,i))) return cid;
+    }
+  }
+  return null;
+}
+
+/* ============ 고객 상담 모드: 공종별 체크 → 수량 흐름 ============ */
+function renderConsultCategory(){
+  const cid = state.active;
+  const meta = CAT_META[cid];
+  const view = state.catView[cid] || 'check';
+  const idx = CAT_ORDER.indexOf(cid);
+  const isLast = idx === CAT_ORDER.length-1;
+  const modeLabel = state.flow==='consult' ? '고객 상담 모드' : '혼자 작업';
+
+  let body = '<div class="cat-head"><div class="eyebrow">CATEGORY '+meta.no+' · '+modeLabel+' · '+(view==='check'?'항목 선택':'수량 입력')+'</div><h2>'+meta.title+'</h2></div>';
+
+  if(view === 'check'){
+    body += checklistSectionHTML(cid, true);
+    body += '<div class="consult-actions"><button class="btn-primary" style="flex:none;padding:12px 22px;" data-role="cat-confirm">이 공종 확인 완료 → 수량 입력</button></div>';
+  } else {
+    groupsForCat(cid).forEach(([group,label])=>{
+      if(label) body += '<div class="subgroup-title">'+label+'</div>';
+      body += quoteTableHTML(group);
+    });
+    body += '<div class="consult-actions">'+
+      '<button class="btn-secondary" style="flex:none;padding:12px 18px;" data-role="cat-recheck">← 항목 다시 체크하기</button>'+
+      (isLast ? '<span class="consult-done-note">마지막 공종이에요. 오른쪽 견적 요약에서 총액을 확인하세요.</span>' :
+        '<button class="btn-primary" style="flex:none;padding:12px 22px;" data-role="cat-next">다음 공종 → '+CAT_META[CAT_ORDER[idx+1]].title+'</button>')+
+      '</div>';
+  }
+  $main.innerHTML = body;
+  bindConsultEvents(cid, view);
+  if(view !== 'check') bindMainEvents();
+}
+function bindConsultEvents(cid, view){
+  $main.querySelectorAll('[data-role="select-item"]').forEach(el=>{
+    el.addEventListener('change', e=>{
+      const group = e.target.dataset.group, i = parseInt(e.target.dataset.i,10);
+      toggleItemSelected(group, i);
+      saveDraft();
+      e.target.closest('label').classList.toggle('checked', e.target.checked);
+    });
+  });
+  const confirmBtn = document.querySelector('[data-role="cat-confirm"]');
+  if(confirmBtn) confirmBtn.addEventListener('click', ()=>{
+    state.catView[cid] = 'qty'; saveDraft(); renderAll(); window.scrollTo(0,0);
+  });
+  const recheckBtn = document.querySelector('[data-role="cat-recheck"]');
+  if(recheckBtn) recheckBtn.addEventListener('click', ()=>{
+    state.catView[cid] = 'check'; saveDraft(); renderAll(); window.scrollTo(0,0);
+  });
+  const nextBtn = document.querySelector('[data-role="cat-next"]');
+  if(nextBtn) nextBtn.addEventListener('click', ()=>{
+    const idx = CAT_ORDER.indexOf(cid);
+    state.active = CAT_ORDER[idx+1];
+    saveDraft(); renderAll(); window.scrollTo(0,0);
+  });
+}
+
 function itemRowHTML(group, i){
   const it = effItem(group, i);
   const price = computePrice(group, i);
@@ -862,9 +1108,14 @@ function quoteTableHTML(group){
   const items = CATALOG[group].items;
   let rows = items.map((it,i)=>{
     const eff = effItem(group,i);
-    return eff.n ? itemRowHTML(group,i) : '';
+    if(!eff.n) return '';
+    if(!isItemSelected(group,i)) return '';
+    return itemRowHTML(group,i);
   }).join('');
   rows += getCustomList(group).map(it=>customRowHTML(group,it)).join('');
+  if(!rows){
+    return '<div class="empty-note" style="margin:10px 0 22px;">이 공종에서 체크한 항목이 없어요. 아래 "+ 항목 추가하기"에서 체크리스트로 돌아가 선택할 수 있어요.</div>';
+  }
   return ''+
   '<table class="items">'+
     '<thead><tr>'+
@@ -934,9 +1185,21 @@ function adminTableHTML(group){
 /* ============ Main render ============ */
 function renderMain(){
   if(state.mode === 'saved'){ renderSavedView(); return; }
+  if(state.mode === 'quote' && state.phase === 'picker'){
+    $main.innerHTML = pickerHTML(); bindPickerEvents(); return;
+  }
+  if(state.mode === 'quote' && state.phase === 'select'){
+    $main.innerHTML = selectSoloHTML();
+    bindSelectEvents(); return;
+  }
+  if(state.mode === 'quote' && (state.flow === 'consult' || state.flow === 'solo')){
+    renderConsultCategory(); return;
+  }
   const cid = state.active;
   const meta = CAT_META[cid];
-  let body = '<div class="cat-head"><div class="eyebrow">CATEGORY '+meta.no+' · '+(state.mode==='admin'?'단가·마진 관리':'견적 작성')+'</div><h2>'+meta.title+'</h2></div>';
+  let body = '<div class="cat-head"><div class="eyebrow">CATEGORY '+meta.no+' · '+(state.mode==='admin'?'단가 설정':'견적 작성')+'</div><h2>'+meta.title+'</h2>'+
+    (state.mode==='quote' ? '<button class="btn-secondary" style="flex:none;padding:8px 14px;" data-role="back-to-select">+ 항목 추가하기</button>' : '')+
+    '</div>';
 
   const groups = cid==="5" ? [["5a",CATALOG["5a"].label],["5b",CATALOG["5b"].label]] : [[CAT_GROUPS[cid][0], null]];
 
@@ -950,6 +1213,13 @@ function renderMain(){
 }
 
 function bindMainEvents(){
+  const backBtn = document.querySelector('[data-role="back-to-select"]');
+  if(backBtn) backBtn.addEventListener('click', ()=>{
+    state.phase = 'select';
+    if(!state.flow) state.flow = 'solo';
+    if(state.flow === 'consult') state.selectIdx = 0;
+    saveDraft(); renderAll(); window.scrollTo(0,0);
+  });
   if(state.mode === 'quote'){
     $main.querySelectorAll('[data-role="qty"]').forEach(el=>{
       el.addEventListener('input', e=>{
@@ -1186,8 +1456,10 @@ function bindSummaryEvents(){
     el.addEventListener('click', ()=>{ state.active = el.dataset.cat; renderAll(); window.scrollTo(0,0); });
   });
   document.getElementById('btn-reset').addEventListener('click', ()=>{
-    if(confirm('입력한 모든 수량과 추가 항목을 초기화할까요? (단가·마진 설정은 유지됩니다)')){
-      state.qty = {}; state.custom = {}; renderAll();
+    if(confirm('입력한 모든 수량과 선택 항목을 초기화하고 처음부터 다시 시작할까요? (단가·마진 설정은 유지됩니다)')){
+      state.qty = {}; state.custom = {}; state.selected = {};
+      state.phase = 'picker'; state.flow = null; state.selectIdx = 0; state.catView = {};
+      saveDraft(); renderAll();
     }
   });
   document.getElementById('btn-reset-price').addEventListener('click', ()=>{
