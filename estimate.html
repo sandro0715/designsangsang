@@ -7,6 +7,7 @@
 <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
 :root{
   --bg:#F4F1E8;
@@ -163,6 +164,8 @@ table.admin-table .col-final{width:110px; text-align:right; font-weight:700;}
   background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
   padding:13px 16px;
 }
+.saved-item.current{border-color:var(--accent); background:var(--accent-soft);}
+.loading-note{padding:40px 0; text-align:center; color:var(--ink-faint); font-size:13px;}
 .saved-item-name{font-size:14px; font-weight:700; color:var(--ink);}
 .saved-item-meta{font-size:11.5px; color:var(--ink-faint); margin-top:3px;}
 .saved-item-actions{display:flex; gap:6px; align-items:center; flex:none;}
@@ -650,8 +653,19 @@ const state = {
   flow: null,         // "solo" | "consult"  (혼자 작업 / 고객 상담 모드)
   selectIdx: 0,       // (미사용 - 이전 버전 호환용)
   catView: {},        // 고객 상담 모드: key cid -> "check" | "qty"  (공종별로 지금 체크리스트 단계인지 수량 입력 단계인지)
+  customerId: null,     // 이 견적이 연결된 고객 (사업 운영 플랫폼에서 넘어온 경우)
+  customerName: null,   // 연결된 고객 이름 (화면 표시용)
+  currentQuoteId: null, // 서버에 저장된 이 견적의 id (다시 저장하면 새로 만들지 않고 이 항목을 덮어씀)
+  savedQuotesCache: null, // "저장된 견적" 목록 서버 조회 캐시
 };
 let customSeq = 1;
+function uid(prefix){
+  if(window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c){
+    const r = Math.random()*16|0, v = c==='x'?r:(r&0x3|0x8);
+    return v.toString(16);
+  });
+}
 
 /* ============ Math helpers ============ */
 function roundUp(value, digits){
@@ -807,15 +821,19 @@ function computeTotals(){
   return {basicDirect, optionDirect, directTotal, indGen, indMisc, indirectTotal, subtotal, vat, grand, byCat};
 }
 
-/* ============ Persistence (localStorage) ============ */
+/* ============ Persistence: 로컬 임시 작업본(draft)은 그대로 localStorage, "저장된 견적"은 서버(Supabase) ============ */
+const SUPABASE_URL = 'https://guuksmffmhgzbqlouvib.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_xgFitqhmRMlA00fD-LXJgw_HHu2TyNX';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
 const STORAGE_DRAFT = 'ds_estimate_draft_v1';
-const STORAGE_SAVED  = 'ds_estimate_saved_v1';
 function saveDraft(){
   try{
     localStorage.setItem(STORAGE_DRAFT, JSON.stringify({
       qty: state.qty, custom: state.custom,
       priceOverride: state.priceOverride, marginOverride: state.marginOverride,
       meta: state.meta, selected: state.selected, phase: state.phase, flow: state.flow, selectIdx: state.selectIdx, catView: state.catView,
+      customerId: state.customerId, currentQuoteId: state.currentQuoteId,
     }));
   }catch(e){ /* storage unavailable (e.g. private mode) -- fail silently */ }
 }
@@ -834,53 +852,69 @@ function loadDraft(){
     state.flow = obj.flow || null;
     state.selectIdx = obj.selectIdx || 0;
     state.catView = obj.catView || {};
+    state.customerId = obj.customerId || null;
+    state.currentQuoteId = obj.currentQuoteId || null;
     if(state.phase === 'build' && selectedCountAll()===0) backfillSelectedFromQty();
   }catch(e){ /* ignore corrupt draft */ }
 }
-function loadSavedList(){
-  try{ return JSON.parse(localStorage.getItem(STORAGE_SAVED) || '[]'); }
-  catch(e){ return []; }
+
+/* ---- 서버 저장 견적 목록 ---- */
+async function fetchSavedQuotes(){
+  let q = sb.from('quotes').select('id, customer_id, label, total, quote_type, created_at').order('created_at', {ascending:false});
+  if(state.customerId) q = q.eq('customer_id', state.customerId);
+  const { data, error } = await q;
+  state.savedQuotesCache = error ? [] : (data||[]);
+  return state.savedQuotesCache;
 }
-function writeSavedList(list){
-  try{ localStorage.setItem(STORAGE_SAVED, JSON.stringify(list)); }
-  catch(e){ alert('브라우저 저장 공간이 부족하거나 사용할 수 없습니다.'); }
-}
-function saveCurrentAsSnapshot(label){
+async function saveCurrentAsSnapshot(label, forceNew){
   const t = computeTotals();
-  const list = loadSavedList();
-  const snap = {
-    id: 's'+Date.now(),
-    customer: label || state.meta.customer || '(이름 없음)',
-    project: state.meta.project || '',
-    savedAt: new Date().toISOString(),
-    grandTotal: t.grand,
-    data: {
+  const id = (!forceNew && state.currentQuoteId) ? state.currentQuoteId : uid('q');
+  const { data: { user } } = await sb.auth.getUser();
+  const row = {
+    id,
+    customer_id: state.customerId || null,
+    label: label || state.meta.customer || state.meta.project || '(이름 없음)',
+    total: t.grand,
+    quote_type: state.meta.quoteType || 'turnkey',
+    created_by: user ? user.id : null,
+    snapshot: {
       qty: state.qty, custom: state.custom,
       priceOverride: state.priceOverride, marginOverride: state.marginOverride,
       meta: state.meta, selected: state.selected,
     },
   };
-  list.unshift(snap);
-  writeSavedList(list);
+  const { error } = await sb.from('quotes').upsert(row);
+  if(error){ alert('저장에 실패했어요: '+error.message); return false; }
+  state.currentQuoteId = id;
+  saveDraft();
+  return true;
 }
-function loadSnapshot(id){
-  const snap = loadSavedList().find(s=>s.id===id);
-  if(!snap) return;
-  state.qty = snap.data.qty || {};
-  state.custom = snap.data.custom || {};
-  state.priceOverride = snap.data.priceOverride || {};
-  state.marginOverride = snap.data.marginOverride || {};
-  state.meta = Object.assign(state.meta, snap.data.meta || {});
-  state.selected = snap.data.selected || {};
+async function loadSnapshot(id){
+  const { data: snap, error } = await sb.from('quotes').select('*').eq('id', id).single();
+  if(error || !snap){ alert('견적을 불러오지 못했어요.'); return; }
+  const d = snap.snapshot || {};
+  state.qty = d.qty || {};
+  state.custom = d.custom || {};
+  state.priceOverride = d.priceOverride || {};
+  state.marginOverride = d.marginOverride || {};
+  state.meta = Object.assign(state.meta, d.meta || {});
+  state.selected = d.selected || {};
   if(selectedCountAll()===0) backfillSelectedFromQty();
   state.phase = 'build';
   state.flow = state.flow || 'solo';
   state.mode = 'quote';
+  state.currentQuoteId = snap.id;
+  state.customerId = snap.customer_id || state.customerId;
+  saveDraft();
   renderAll();
 }
-function deleteSnapshot(id){
-  writeSavedList(loadSavedList().filter(s=>s.id!==id));
+async function deleteSnapshot(id){
+  const { error } = await sb.from('quotes').delete().eq('id', id);
+  if(error){ alert('삭제에 실패했어요: '+error.message); return; }
+  if(state.currentQuoteId === id) state.currentQuoteId = null;
+  await fetchSavedQuotes();
 }
+
 
 /* ============ DOM refs ============ */
 const $nav = document.getElementById('nav-list');
@@ -1355,16 +1389,24 @@ function refreshGroupFinalPrices(group){
 
 /* ============ Saved quotes view ============ */
 function renderSavedView(){
-  const list = loadSavedList();
+  if(state.savedQuotesCache === null){
+    $main.innerHTML = '<div class="cat-head"><div class="eyebrow">CUSTOMER ARCHIVE</div><h2>저장된 견적 관리</h2></div><div class="loading-note">불러오는 중…</div>';
+    fetchSavedQuotes().then(()=>{ if(state.mode==='saved') renderMain(); });
+    return;
+  }
+  const list = state.savedQuotesCache;
   const t = computeTotals();
-  let html = '<div class="cat-head"><div class="eyebrow">CUSTOMER ARCHIVE</div><h2>저장된 견적 관리</h2></div>';
+  let html = '<div class="cat-head"><div class="eyebrow">CUSTOMER ARCHIVE</div><h2>저장된 견적 관리</h2>'+
+    (state.customerName ? '<div class="desc">'+escapeHtml(state.customerName)+' 고객님의 견적만 보이고 있어요.</div>' : '')+
+    '</div>';
   html += '<div class="save-box">'+
     '<div class="save-box-title">현재 작업 중인 견적을 이름 붙여 저장</div>'+
     '<div class="save-box-row">'+
       '<input type="text" id="save-name-input" placeholder="고객명 / 프로젝트명" value="'+escapeHtml(state.meta.customer||state.meta.project||'')+'">'+
-      '<button class="btn-add" id="btn-save-snapshot">현재 견적 저장</button>'+
+      '<button class="btn-add" id="btn-save-snapshot">'+(state.currentQuoteId?'수정 저장':'현재 견적 저장')+'</button>'+
+      (state.currentQuoteId ? '<button class="btn-secondary" id="btn-save-as-new" style="flex:none;">새 견적으로 저장</button>' : '')+
     '</div>'+
-    '<div class="save-box-hint">현재 작업 중인 견적 총액: <b>₩ '+won(t.grand)+'</b> · 이 브라우저(이 컴퓨터)에만 저장되며, 새로고침해도 사라지지 않습니다.</div>'+
+    '<div class="save-box-hint">현재 작업 중인 견적 총액: <b>₩ '+won(t.grand)+'</b> · 서버에 저장돼서 다른 컴퓨터·폰에서도 똑같이 보여요.</div>'+
   '</div>';
 
   if(list.length===0){
@@ -1373,11 +1415,11 @@ function renderSavedView(){
     html += '<div class="saved-list">';
     list.forEach(s=>{
       let dateStr = '';
-      try{ dateStr = new Date(s.savedAt).toLocaleString('ko-KR'); }catch(e){}
-      html += '<div class="saved-item">'+
+      try{ dateStr = new Date(s.created_at).toLocaleString('ko-KR'); }catch(e){}
+      html += '<div class="saved-item'+(s.id===state.currentQuoteId?' current':'')+'">'+
         '<div class="saved-item-main">'+
-          '<div class="saved-item-name">'+escapeHtml(s.customer)+(s.project? ' · '+escapeHtml(s.project):'')+'</div>'+
-          '<div class="saved-item-meta">'+dateStr+' 저장 · 총 ₩ '+won(s.grandTotal||0)+'</div>'+
+          '<div class="saved-item-name">'+escapeHtml(s.label)+'</div>'+
+          '<div class="saved-item-meta">'+dateStr+' 저장 · 총 ₩ '+won(s.total||0)+'</div>'+
         '</div>'+
         '<div class="saved-item-actions">'+
           '<button class="btn-secondary" data-role="load-snap" data-id="'+s.id+'">불러오기</button>'+
@@ -1387,26 +1429,37 @@ function renderSavedView(){
     });
     html += '</div>';
   }
-  html += '<div class="footnote">지금은 이 브라우저에만 저장되는 테스트 버전입니다. 실제 사무실에서 여러 명이 같은 저장 목록을 보려면 서버에 올려야 하는데, 준비되시면 무료로 호스팅하는 방법부터 순서대로 안내해 드릴게요.</div>';
+  html += '<div class="footnote">이제 서버(Supabase)에 저장돼요. 사업 운영 플랫폼의 고객 상세 화면에서도 이 목록이 함께 보여요.</div>';
   $main.innerHTML = html;
 
-  document.getElementById('btn-save-snapshot').addEventListener('click', ()=>{
+  document.getElementById('btn-save-snapshot').addEventListener('click', async ()=>{
     const label = document.getElementById('save-name-input').value.trim();
     if(!label){ alert('고객명 또는 프로젝트명을 입력해 주세요.'); return; }
-    saveCurrentAsSnapshot(label);
+    const btn = document.getElementById('btn-save-snapshot');
+    btn.disabled = true; btn.textContent = '저장 중…';
+    const ok = await saveCurrentAsSnapshot(label, false);
+    if(ok) await fetchSavedQuotes();
+    renderMain();
+  });
+  const asNewBtn = document.getElementById('btn-save-as-new');
+  if(asNewBtn) asNewBtn.addEventListener('click', async ()=>{
+    const label = document.getElementById('save-name-input').value.trim();
+    if(!label){ alert('고객명 또는 프로젝트명을 입력해 주세요.'); return; }
+    const ok = await saveCurrentAsSnapshot(label, true);
+    if(ok) await fetchSavedQuotes();
     renderMain();
   });
   $main.querySelectorAll('[data-role="load-snap"]').forEach(el=>{
-    el.addEventListener('click', e=>{
+    el.addEventListener('click', async e=>{
       if(confirm('저장된 견적을 불러오면 현재 작업 중인 내용은 덮어씌워집니다. 계속할까요?')){
-        loadSnapshot(e.target.dataset.id);
+        await loadSnapshot(e.target.dataset.id);
       }
     });
   });
   $main.querySelectorAll('[data-role="del-snap"]').forEach(el=>{
-    el.addEventListener('click', e=>{
+    el.addEventListener('click', async e=>{
       if(confirm('이 저장된 견적을 삭제할까요?')){
-        deleteSnapshot(e.target.dataset.id);
+        await deleteSnapshot(e.target.dataset.id);
         renderMain();
       }
     });
@@ -1459,6 +1512,7 @@ function bindSummaryEvents(){
     if(confirm('입력한 모든 수량과 선택 항목을 초기화하고 처음부터 다시 시작할까요? (단가·마진 설정은 유지됩니다)')){
       state.qty = {}; state.custom = {}; state.selected = {};
       state.phase = 'picker'; state.flow = null; state.selectIdx = 0; state.catView = {};
+      state.currentQuoteId = null;
       saveDraft(); renderAll();
     }
   });
@@ -1548,10 +1602,33 @@ function buildPrintView(){
 }
 
 /* ============ Init ============ */
-loadDraft();
-bindMeta();
-bindModeSwitch();
-renderAll();
+(async function initFromURL(){
+  const params = new URLSearchParams(window.location.search);
+  const customerId = params.get('customer_id');
+  const customerName = params.get('customer_name');
+  const quoteId = params.get('quote_id');
+
+  bindMeta();
+  bindModeSwitch();
+
+  if(quoteId){
+    // 특정 저장된 견적을 직접 불러오는 경우 (localStorage 임시 작업본은 무시)
+    state.customerId = customerId || null;
+    state.customerName = customerName ? decodeURIComponent(customerName) : null;
+    await loadSnapshot(quoteId); // 내부에서 renderAll() 호출함
+  } else if(customerId){
+    // 고객 상세 화면에서 "새 견적 작성"으로 들어온 경우
+    loadDraft();
+    state.customerId = customerId;
+    state.customerName = customerName ? decodeURIComponent(customerName) : null;
+    if(state.customerName) state.meta.customer = state.customerName;
+    renderAll();
+  } else {
+    // 독립적으로 열었을 때 (기존 동작 그대로)
+    loadDraft();
+    renderAll();
+  }
+})();
 
 </script>
 </body>

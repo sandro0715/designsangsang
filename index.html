@@ -530,6 +530,7 @@ const state = {
   detailCustomerId: null,
   custFilter: { q:'', status:'' },
   drag: null,
+  estimateQuery: '', // 견적 계산기 탭으로 넘어갈 때 붙일 쿼리스트링 (고객 연결용)
 };
 
 function uid(prefix){
@@ -695,7 +696,7 @@ function renderNav(){
     '</button>'
   )).join('');
   $sidenav.querySelectorAll('[data-nav]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{ state.view = btn.dataset.nav; renderMain(); renderNav(); });
+    btn.addEventListener('click', ()=>{ state.view = btn.dataset.nav; if(btn.dataset.nav==='estimate') state.estimateQuery=''; renderMain(); renderNav(); });
   });
 }
 
@@ -704,7 +705,7 @@ function renderMain(){
   if(state.view==='dashboard') return renderDashboard();
   if(state.view==='schedule') return renderSchedule();
   if(state.view==='customers') return renderCustomers();
-  if(state.view==='estimate') return renderToolFrame('estimate.html','견적 계산기');
+  if(state.view==='estimate') return renderToolFrame('estimate.html'+(state.estimateQuery||''),'견적 계산기');
   if(state.view==='kitchen') return renderToolFrame('kitchen.html','주방 견적 계산기');
   if(state.view==='tile') return renderToolFrame('tile.html','타일 수량 산출');
   if(state.view==='projects') return renderProjects();
@@ -1161,6 +1162,34 @@ function bindModalClose(){
 function closeModal(){ $modalRoot.innerHTML = ''; }
 
 /* ============ Customer detail panel ============ */
+function goToEstimateForCustomer(c, quoteId){
+  let qs = '?customer_id='+encodeURIComponent(c.id)+'&customer_name='+encodeURIComponent(c.name);
+  if(quoteId) qs += '&quote_id='+encodeURIComponent(quoteId);
+  state.estimateQuery = qs;
+  state.view = 'estimate';
+  closeDetail();
+  renderMain(); renderNav();
+}
+async function loadCustomerQuotesIntoDetail(c){
+  const box = document.getElementById('detail-quotes-list');
+  if(!box) return;
+  const { data, error } = await sb.from('quotes').select('id, label, total, created_at').eq('customer_id', c.id).order('created_at', {ascending:false});
+  const nowBox = document.getElementById('detail-quotes-list');
+  if(!nowBox) return; // 패널이 이미 닫힌 경우
+  if(error){ nowBox.innerHTML = '<div class="empty-note">견적을 불러오지 못했어요.</div>'; return; }
+  const list = data || [];
+  if(list.length===0){ nowBox.innerHTML = '<div class="empty-note">아직 작성된 견적이 없어요.</div>'; return; }
+  nowBox.innerHTML = list.map(q=>{
+    let d = ''; try{ d = q.created_at.slice(0,10); }catch(e){}
+    return '<div class="mini-cust" data-quote="'+q.id+'" style="cursor:pointer;">'+
+      '<div class="mini-cust-name">'+escapeHtml(q.label)+'</div>'+
+      '<span class="tag" style="background:var(--surface-2);">₩ '+won(q.total||0)+'</span>'+
+    '</div>';
+  }).join('');
+  nowBox.querySelectorAll('[data-quote]').forEach(el=>{
+    el.addEventListener('click', ()=> goToEstimateForCustomer(c, el.dataset.quote));
+  });
+}
 function openCustomerDetail(id){
   const c = customerById(id);
   if(!c) return;
@@ -1185,15 +1214,22 @@ function openCustomerDetail(id){
   html += '<div class="detail-section-title">최근 일정 ('+custEvents.length+')</div>';
   if(custEvents.length===0){ html += '<div class="empty-note">없음</div>'; }
   else { custEvents.forEach(e=>{ html += '<div class="agenda-item"><div class="agenda-time num" style="width:70px;">'+fmtDate(e.date)+'</div><div class="agenda-title">'+escapeHtml(e.title)+'</div></div>'; }); }
+  html += '<div class="detail-section-title">견적서</div>'+
+    '<div id="detail-quotes-list"><div class="empty-note">불러오는 중…</div></div>';
   html += '<div class="detail-actions">'+
     '<button class="btn btn-ghost" id="btn-edit-customer">정보 수정</button>'+
     '<button class="btn btn-primary" id="btn-add-event-for-customer">+ 일정 추가</button>'+
+  '</div>'+
+  '<div class="detail-actions" style="margin-top:8px;">'+
+    '<button class="btn btn-primary" id="btn-new-quote-for-customer" style="flex:1;">+ 새 견적 작성</button>'+
   '</div>';
   html += '</div>';
   $detailRoot.innerHTML = html;
   document.getElementById('detail-close').addEventListener('click', closeDetail);
   document.getElementById('detail-backdrop').addEventListener('click', closeDetail);
   document.getElementById('btn-edit-customer').addEventListener('click', ()=> openCustomerModal(c.id));
+  document.getElementById('btn-new-quote-for-customer').addEventListener('click', ()=> goToEstimateForCustomer(c, null));
+  loadCustomerQuotesIntoDetail(c);
   document.getElementById('btn-add-event-for-customer').addEventListener('click', ()=>{
     closeDetail();
     openEventModal(null, todayISO());
