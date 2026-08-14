@@ -684,7 +684,7 @@ const NAV_ITEMS = [
   {id:'dashboard', no:'1', label:'대시보드'},
   {id:'schedule',  no:'2', label:'일정 관리'},
   {id:'customers', no:'3', label:'고객 관리'},
-  {id:'estimate',  no:'4', label:'견적 계산기'},
+  {id:'estimate',  no:'4', label:'견적 관리'},
   {id:'kitchen',   no:'5', label:'주방 견적'},
   {id:'tile',      no:'6', label:'타일 수량'},
   {id:'projects',  no:'7', label:'프로젝트 현황'},
@@ -705,7 +705,7 @@ function renderMain(){
   if(state.view==='dashboard') return renderDashboard();
   if(state.view==='schedule') return renderSchedule();
   if(state.view==='customers') return renderCustomers();
-  if(state.view==='estimate') return renderToolFrame('estimate.html'+(state.estimateQuery||''),'견적 계산기');
+  if(state.view==='estimate') return renderToolFrame('estimate.html'+(state.estimateQuery||''),'견적 관리');
   if(state.view==='kitchen') return renderToolFrame('kitchen.html','주방 견적 계산기');
   if(state.view==='tile') return renderToolFrame('tile.html','타일 수량 산출');
   if(state.view==='projects') return renderProjects();

@@ -570,7 +570,7 @@ table.items tbody tr.has-qty:hover{background:#F8F0DC;}
     <h1>인테리어 공사 견적 계산기</h1>
     <div class="mode-switch">
       <button class="mode-btn" data-mode-btn="quote">견적 작성</button>
-      <button class="mode-btn" data-mode-btn="admin">단가 설정</button>
+      <button class="mode-btn" data-mode-btn="admin" id="mode-btn-admin">설정</button>
       <button class="mode-btn" data-mode-btn="saved">저장된 견적</button>
     </div>
     <span class="sub">디자인상상 · 실내 인테리어 공사 견적서 v2608</span>
@@ -1231,7 +1231,7 @@ function renderMain(){
   }
   const cid = state.active;
   const meta = CAT_META[cid];
-  let body = '<div class="cat-head"><div class="eyebrow">CATEGORY '+meta.no+' · '+(state.mode==='admin'?'단가 설정':'견적 작성')+'</div><h2>'+meta.title+'</h2>'+
+  let body = '<div class="cat-head"><div class="eyebrow">CATEGORY '+meta.no+' · '+(state.mode==='admin'?'설정':'견적 작성')+'</div><h2>'+meta.title+'</h2>'+
     (state.mode==='quote' ? '<button class="btn-secondary" style="flex:none;padding:8px 14px;" data-role="back-to-select">+ 항목 추가하기</button>' : '')+
     '</div>';
 
@@ -1538,14 +1538,33 @@ function bindMeta(){
     el.addEventListener('input', e=>{ state.meta[e.target.dataset.meta] = e.target.value; saveDraft(); });
   });
 }
+let CURRENT_ROLE = null;
 function bindModeSwitch(){
   $modeBtns.forEach(btn=>{
     btn.addEventListener('click', ()=>{
+      if(btn.dataset.modeBtn === 'admin' && CURRENT_ROLE !== 'admin'){
+        alert('설정은 관리자만 접근할 수 있어요.');
+        return;
+      }
       state.mode = btn.dataset.modeBtn;
       renderAll();
       window.scrollTo(0,0);
     });
   });
+}
+async function loadCurrentRoleAndApply(){
+  try{
+    const { data: { user } } = await sb.auth.getUser();
+    if(!user) return;
+    const { data } = await sb.from('profiles').select('role').eq('id', user.id).single();
+    CURRENT_ROLE = data ? data.role : null;
+  }catch(e){ CURRENT_ROLE = null; }
+  const adminBtn = document.getElementById('mode-btn-admin');
+  if(adminBtn) adminBtn.style.display = (CURRENT_ROLE==='admin') ? '' : 'none';
+  if(state.mode === 'admin' && CURRENT_ROLE !== 'admin'){
+    state.mode = 'quote';
+    renderAll();
+  }
 }
 
 /* ============ Print view ============ */
@@ -1610,6 +1629,7 @@ function buildPrintView(){
 
   bindMeta();
   bindModeSwitch();
+  loadCurrentRoleAndApply();
 
   if(quoteId){
     // 특정 저장된 견적을 직접 불러오는 경우 (localStorage 임시 작업본은 무시)
