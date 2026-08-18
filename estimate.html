@@ -2123,8 +2123,7 @@ function buildPrintView(){
     state.customerName = customerName ? decodeURIComponent(customerName) : null;
     await loadSnapshot(quoteId); // 내부에서 renderAll() 호출함
   } else if(customerId){
-    // 고객 상세 화면에서 "새 견적 작성"으로 들어온 경우
-    loadDraft();
+    // 고객 상세 화면에서 "새 견적 작성"으로 들어온 경우 - 이 브라우저에 남아있던 예전 임시저장본은 무시하고 항상 깨끗하게 새로 시작
     state.customerId = customerId;
     state.customerName = customerName ? decodeURIComponent(customerName) : null;
     if(state.customerName) state.meta.customer = state.customerName;
