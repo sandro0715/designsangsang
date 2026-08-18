@@ -724,7 +724,7 @@ const state = {
   customerName: null,   // 연결된 고객 이름 (화면 표시용)
   currentQuoteId: null, // 서버에 저장된 이 견적의 id (다시 저장하면 새로 만들지 않고 이 항목을 덮어씀)
   savedQuotesCache: null, // "저장된 견적" 목록 서버 조회 캐시
-  quoteConfig: { feePercent:15, adminFeeMode:'fixed', adminFeeValue:1000000, carpenterDayWage:350000, vatOnFeeDefault:true }, // 직영공사 수수료 및 목수 일당 기본값 (서버에서 불러옴)
+  quoteConfig: { feePercent:15, adminFeeMode:'fixed', adminFeeValue:1000000, carpenterDayWage:350000, tileDayWage:250000, filmDayWage:250000, electricDayWage:250000, vatOnFeeDefault:true },
   windowPositions: [], // 창호 위치 목록 (서버에서 불러옴)
   adminMoveSelected: {}, // 설정 화면: 다른 공종으로 이동시킬 항목 체크 상태 (key `${group}|${i}` -> true)
   carpenterDaysOverride: {}, // 목공사 품수 수동 조정값 (group -> number|null)
@@ -893,6 +893,9 @@ async function loadLivePricing(){
       adminFeeMode: cfgRes.data.direct_admin_fee_mode,
       adminFeeValue: cfgRes.data.direct_admin_fee_value,
       carpenterDayWage: cfgRes.data.carpenter_day_wage || 350000,
+      tileDayWage: cfgRes.data.tile_day_wage || 250000,
+      filmDayWage: cfgRes.data.film_day_wage || 250000,
+      electricDayWage: cfgRes.data.electric_day_wage || 250000,
       vatOnFeeDefault: cfgRes.data.direct_vat_on_fee_default !== false,
     };
   }
@@ -917,6 +920,9 @@ function saveQuoteConfigToServer(){
     direct_admin_fee_mode: cfg.adminFeeMode,
     direct_admin_fee_value: Number(cfg.adminFeeValue)||0,
     carpenter_day_wage: Number(cfg.carpenterDayWage)||350000,
+    tile_day_wage: Number(cfg.tileDayWage)||250000,
+    film_day_wage: Number(cfg.filmDayWage)||250000,
+    electric_day_wage: Number(cfg.electricDayWage)||250000,
     direct_vat_on_fee_default: !!cfg.vatOnFeeDefault,
   }).then(({error})=>{ if(error) console.error('직영 수수료 설정 저장 실패', error); });
 }
@@ -999,14 +1005,27 @@ function itemExpenseRaw(group, i){
   if(it.exp===undefined || it.exp===null) return 0;
   return roundUp(it.exp, it.ep);
 }
+const TRADE_DAY_GROUPS = {
+  "4":  { wageField: 'carpenterDayWage', label: '목수' },
+  "5":  { wageField: 'tileDayWage',      label: '타일공' },
+  "8":  { wageField: 'filmDayWage',      label: '필름공' },
+  "11": { wageField: 'electricDayWage',  label: '전기공' },
+};
+function tradeDayWage(group){
+  const cfg = TRADE_DAY_GROUPS[group];
+  return (cfg && state.quoteConfig[cfg.wageField]) || 350000;
+}
+function tradeLabel(group){
+  const cfg = TRADE_DAY_GROUPS[group];
+  return cfg ? cfg.label : '작업자';
+}
 function carpenterAutoDays(group){
   let laborSum = 0;
   CATALOG[group].items.forEach((it,i)=>{
     const st = getQty(group,i);
     if(st.q>0) laborSum += itemLaborRaw(group,i) * st.q;
   });
-  const wage = state.quoteConfig.carpenterDayWage || 350000;
-  return laborSum / wage;
+  return laborSum / tradeDayWage(group);
 }
 function carpenterEffectiveDays(group){
   const ov = state.carpenterDaysOverride[group];
@@ -1014,7 +1033,7 @@ function carpenterEffectiveDays(group){
   return carpenterAutoDays(group);
 }
 function isCarpenterDirectGroup(group){
-  return group === "4" && state.meta.quoteType === 'direct';
+  return !!TRADE_DAY_GROUPS[group] && state.meta.quoteType === 'direct';
 }
 function groupSum(group){
   if(isCarpenterDirectGroup(group)){
@@ -1248,11 +1267,23 @@ function renderDirectFeeConfig(){
     '</div>'+
     '<div class="field">'+
       '<label id="cfg-admin-value-label">공정관리비 '+(cfg.adminFeeMode==='percent'?'(%)':'(원)')+'</label>'+
-      '<input type="number" id="cfg-admin-value" step="'+(cfg.adminFeeMode==='percent'?'0.1':'10000')+'" value="'+(cfg.adminFeeValue)+'">'+
+      '<input type="text" inputmode="numeric" class="money-input" id="cfg-admin-value" value="'+(cfg.adminFeeMode==='percent'?cfg.adminFeeValue:fmtNum(cfg.adminFeeValue))+'">'+
     '</div>'+
     '<div class="field">'+
       '<label>목수 일당 (품수 환산 기준, 원)</label>'+
-      '<input type="number" id="cfg-carpenter-wage" step="10000" value="'+(cfg.carpenterDayWage)+'">'+
+      '<input type="text" inputmode="numeric" class="money-input" id="cfg-carpenter-wage" value="'+fmtNum(cfg.carpenterDayWage)+'">'+
+    '</div>'+
+    '<div class="field">'+
+      '<label>타일공 일당 (원)</label>'+
+      '<input type="text" inputmode="numeric" class="money-input" id="cfg-tile-wage" value="'+fmtNum(cfg.tileDayWage)+'">'+
+    '</div>'+
+    '<div class="field">'+
+      '<label>필름공 일당 (원)</label>'+
+      '<input type="text" inputmode="numeric" class="money-input" id="cfg-film-wage" value="'+fmtNum(cfg.filmDayWage)+'">'+
+    '</div>'+
+    '<div class="field">'+
+      '<label>전기공 일당 (원)</label>'+
+      '<input type="text" inputmode="numeric" class="money-input" id="cfg-electric-wage" value="'+fmtNum(cfg.electricDayWage)+'">'+
     '</div>'+
     '<div class="field">'+
       '<label>수수료 부가세 기본값</label>'+
@@ -1266,8 +1297,11 @@ function renderDirectFeeConfig(){
     state.quoteConfig = {
       feePercent: Number(document.getElementById('cfg-fee-percent').value)||0,
       adminFeeMode: document.querySelector('input[name="cfg-admin-mode"]:checked').value,
-      adminFeeValue: Number(document.getElementById('cfg-admin-value').value)||0,
-      carpenterDayWage: Number(document.getElementById('cfg-carpenter-wage').value)||350000,
+      adminFeeValue: parseCommaNum(document.getElementById('cfg-admin-value').value)||0,
+      carpenterDayWage: parseCommaNum(document.getElementById('cfg-carpenter-wage').value)||350000,
+      tileDayWage: parseCommaNum(document.getElementById('cfg-tile-wage').value)||250000,
+      filmDayWage: parseCommaNum(document.getElementById('cfg-film-wage').value)||250000,
+      electricDayWage: parseCommaNum(document.getElementById('cfg-electric-wage').value)||250000,
       vatOnFeeDefault: document.getElementById('cfg-vat-default').checked,
     };
     btn.disabled = true; btn.textContent = '저장 중…';
@@ -1509,7 +1543,7 @@ function windowCalcBoxHTML(group){
       '<input type="number" id="win-width" placeholder="가로(mm)">'+
       '<input type="number" id="win-height" placeholder="세로(mm)">'+
       '<span class="window-calc-japyeong" id="win-japyeong-out">자평 0.00</span>'+
-      '<input type="number" id="win-unitprice" placeholder="단가(원/자평)">'+
+      '<input type="text" inputmode="numeric" class="money-input" id="win-unitprice" placeholder="단가(원/자평)">'+
       '<span class="window-calc-amt" id="win-amt-out">₩ 0</span>'+
       '<button class="btn-add" id="win-add-btn" data-group="'+group+'">추가</button>'+
     '</div>'+
@@ -1520,16 +1554,16 @@ function carpenterDaysBoxHTML(group){
   const auto = carpenterAutoDays(group);
   const ov = state.carpenterDaysOverride[group];
   const current = (ov !== undefined && ov !== null && ov !== '') ? ov : Math.round(auto*10)/10;
-  const wage = state.quoteConfig.carpenterDayWage || 350000;
+  const wage = tradeDayWage(group);
   return ''+
   '<div class="carpenter-box">'+
-    '<div class="carpenter-box-title">목수 품수 참고 (직영공사)</div>'+
+    '<div class="carpenter-box-title">'+tradeLabel(group)+' 품수 참고 (직영공사)</div>'+
     '<div class="carpenter-box-row">'+
       '<span class="carpenter-auto">자동계산 '+auto.toFixed(2)+'품 (선택 항목 노무비 합계 ÷ 일당 '+won(wage)+'원)</span>'+
       '<input type="number" step="0.1" class="carpenter-days-input" id="carpenter-days-'+group+'" data-group="'+group+'" value="'+current+'"> 품'+
       '<span class="carpenter-total">약 '+won(current*wage)+'원 상당</span>'+
     '</div>'+
-    '<div class="carpenter-box-hint">견적 금액에는 포함되지 않아요. 목수·장비대를 직접 협의하실 때 참고하는 값이에요. 필요하시면 "설정"에서 직접 항목으로 추가해 넣으실 수 있어요.</div>'+
+    '<div class="carpenter-box-hint">견적 금액에는 포함되지 않아요. '+tradeLabel(group)+'·장비대를 직접 협의하실 때 참고하는 값이에요. 필요하시면 "설정"에서 직접 항목으로 추가해 넣으실 수 있어요.</div>'+
   '</div>';
 }
 function refreshCarpenterDaysBox(group){
@@ -1537,7 +1571,7 @@ function refreshCarpenterDaysBox(group){
   if(!input) return;
   const box = input.closest('.carpenter-box');
   const auto = carpenterAutoDays(group);
-  const wage = state.quoteConfig.carpenterDayWage || 350000;
+  const wage = tradeDayWage(group);
   box.querySelector('.carpenter-auto').textContent = '자동계산 '+auto.toFixed(2)+'품 (선택 항목 노무비 합계 ÷ 일당 '+won(wage)+'원)';
   const ov = state.carpenterDaysOverride[group];
   if(ov === undefined || ov === null || ov === ''){
@@ -1578,7 +1612,7 @@ function quoteTableHTML(group){
       '<input type="text" placeholder="품명" data-role="new-n" data-group="'+group+'">'+
       '<input type="text" placeholder="규격 (선택)" data-role="new-s" data-group="'+group+'">'+
       '<input type="text" placeholder="단위 (예: EA, m, 식)" data-role="new-u" data-group="'+group+'">'+
-      '<input type="number" placeholder="단가" data-role="new-p" data-group="'+group+'">'+
+      '<input type="text" inputmode="numeric" class="money-input" placeholder="단가" data-role="new-p" data-group="'+group+'">'+
       '<label style="font-size:12px;color:var(--ink-dim);display:flex;align-items:center;gap:5px;"><input type="checkbox" class="opt-check" data-role="new-opt" data-group="'+group+'"> 옵션</label>'+
       '<button class="btn-add" data-role="new-add" data-group="'+group+'">추가</button>'+
     '</div>'+
@@ -1587,8 +1621,15 @@ function quoteTableHTML(group){
 }
 
 /* ============ Admin (price & margin) table ============ */
+function fmtNum(n){
+  if(n===undefined || n===null || n==='') return '';
+  return Number(n).toLocaleString('ko-KR');
+}
+function parseCommaNum(v){
+  return Number(String(v).replace(/,/g,'')) || 0;
+}
 function costCellHTML(group, i, field, value, placeholder){
-  return '<input type="number" class="cost-input num" value="'+(value===undefined||value===null?'':value)+'" placeholder="'+placeholder+'" data-role="cost" data-field="'+field+'" data-group="'+group+'" data-i="'+i+'" onfocus="this.select()">';
+  return '<input type="text" inputmode="numeric" class="cost-input num money-input" value="'+fmtNum(value)+'" placeholder="'+placeholder+'" data-role="cost" data-field="'+field+'" data-group="'+group+'" data-i="'+i+'" onfocus="this.select()">';
 }
 function allGroupOptions(){
   const opts = [];
@@ -1823,7 +1864,8 @@ function bindMainEvents(){
     $main.querySelectorAll('[data-role="qty"]').forEach(el=>{
       el.addEventListener('input', e=>{
         const group = e.target.dataset.group, i = parseInt(e.target.dataset.i,10);
-        const v = Math.max(0, parseInt(e.target.value||'0',10)||0);
+        let v = Math.max(0, parseFloat(e.target.value)||0);
+        v = Math.round(v*10)/10; // 소수점 첫째 자리까지
         setQty(group, i, {q:v});
         updateRowAmount(e.target.closest('tr'), rowDisplayPrice(group,i), v);
         updateSubtotalDisplay(group);
@@ -1840,7 +1882,8 @@ function bindMainEvents(){
     $main.querySelectorAll('[data-role="c-qty"]').forEach(el=>{
       el.addEventListener('input', e=>{
         const group = e.target.dataset.group, id = e.target.dataset.id;
-        const v = Math.max(0, parseInt(e.target.value||'0',10)||0);
+        let v = Math.max(0, parseFloat(e.target.value)||0);
+        v = Math.round(v*10)/10;
         updateCustom(group, id, {q:v});
         const it = getCustomList(group).find(x=>x.id===id);
         updateRowAmount(e.target.closest('tr'), it.p, v);
@@ -1872,7 +1915,7 @@ function bindMainEvents(){
         const n = root.querySelector('[data-role="new-n"]').value.trim();
         const s = root.querySelector('[data-role="new-s"]').value.trim();
         const u = root.querySelector('[data-role="new-u"]').value.trim();
-        const p = root.querySelector('[data-role="new-p"]').value;
+        const p = parseCommaNum(root.querySelector('[data-role="new-p"]').value);
         const opt = root.querySelector('[data-role="new-opt"]').checked;
         if(!n || !p){ alert('품명과 단가를 입력해 주세요.'); return; }
         addCustom(group, n, s, u, p, opt);
@@ -1886,7 +1929,7 @@ function bindMainEvents(){
     function updateWinPreview(){
       const jp = calcJaPyeong(winW.value, winH.value);
       document.getElementById('win-japyeong-out').textContent = '자평 '+jp.toFixed(2);
-      const amt = jp * (Number(winP.value)||0);
+      const amt = jp * (parseCommaNum(winP.value)||0);
       document.getElementById('win-amt-out').textContent = '₩ '+won(amt);
     }
     [winW, winH, winP].forEach(el=>{ if(el) el.addEventListener('input', updateWinPreview); });
@@ -1896,7 +1939,7 @@ function bindMainEvents(){
         if(!winPos.value){ alert('위치를 선택해 주세요.'); return; }
         if(!winW.value || !winH.value){ alert('가로/세로 사이즈를 입력해 주세요.'); return; }
         if(!winP.value){ alert('단가(원/자평)를 입력해 주세요.'); return; }
-        addWindowCustomItem(group, winPos.value, winW.value, winH.value, winP.value);
+        addWindowCustomItem(group, winPos.value, winW.value, winH.value, parseCommaNum(winP.value));
       });
     }
     $main.querySelectorAll('.carpenter-days-input').forEach(el=>{
@@ -1905,7 +1948,7 @@ function bindMainEvents(){
         state.carpenterDaysOverride[group] = e.target.value === '' ? null : Number(e.target.value);
         saveDraft();
         const totalSpan = e.target.closest('.carpenter-box-row').querySelector('.carpenter-total');
-        const wage = state.quoteConfig.carpenterDayWage || 350000;
+        const wage = tradeDayWage(group);
         totalSpan.textContent = '약 '+won((Number(e.target.value)||0)*wage)+'원 상당';
       });
     });
@@ -1976,7 +2019,7 @@ function bindMainEvents(){
     $main.querySelectorAll('[data-role="cost"]').forEach(el=>{
       el.addEventListener('input', e=>{
         const group = e.target.dataset.group, i = parseInt(e.target.dataset.i,10), field = e.target.dataset.field;
-        const v = e.target.value === '' ? 0 : Number(e.target.value);
+        const v = parseCommaNum(e.target.value);
         setPriceField(group, i, field, v);
         updateFinalPriceCell(e.target.closest('tr'), group, i);
         renderNav(); renderSummaryOnly();
@@ -2326,11 +2369,24 @@ function buildPrintView(){
       '<tr class="final"><td>총 계</td><td class="p-right">'+won(t.grand)+' 원</td></tr>'+
     '</tbody></table>'+
     '<div class="p-note">'+
-      (t.isDirect && (carpenterEffectiveDays("4")>0) ? '* 목공사 목수 인건비(참고): 약 '+carpenterEffectiveDays("4").toFixed(2)+'품 (₩ '+won(carpenterEffectiveDays("4")*(state.quoteConfig.carpenterDayWage||350000))+' 상당) — 본 금액은 위 견적에 포함되지 않으며, 고객이 목수에게 직접 지급합니다.<br>' : '')+
+      (t.isDirect ? Object.keys(TRADE_DAY_GROUPS).map(g=>{
+        if(carpenterEffectiveDays(g)<=0) return '';
+        return '* '+CAT_META[cidForGroup(g)].title+' '+tradeLabel(g)+' 인건비(참고): 약 '+carpenterEffectiveDays(g).toFixed(2)+'품 (₩ '+won(carpenterEffectiveDays(g)*tradeDayWage(g))+' 상당) — 본 금액은 위 견적에 포함되지 않으며, 고객이 '+tradeLabel(g)+'에게 직접 지급합니다.<br>';
+      }).join('') : '')+
       '* 본 견적서는 V.A.T 포함 견적서이며, 발행일로부터 2주간 유효합니다.<br>* 상기 기재된 내용은 참고 단가 기준의 가견적이며, 현장 실측 및 자재·시공 방법 변경에 따라 조정될 수 있습니다.<br>* 입금계좌 : IBK기업은행 119-248205-04-016 (예금주 : 이윤정)</div>';
   document.getElementById('printArea').innerHTML = html;
   window.print();
 }
+
+/* 금액 입력칸(.money-input)은 타이핑하는 동안 자동으로 콤마(천단위)가 붙어요 */
+document.addEventListener('input', e=>{
+  if(!e.target.classList || !e.target.classList.contains('money-input')) return;
+  const el = e.target;
+  const cursorAtEnd = el.selectionStart === el.value.length;
+  const digits = el.value.replace(/[^\d]/g,'');
+  el.value = digits ? Number(digits).toLocaleString('ko-KR') : '';
+  if(cursorAtEnd) el.setSelectionRange(el.value.length, el.value.length);
+});
 
 /* ============ Init ============ */
 (async function initFromURL(){
