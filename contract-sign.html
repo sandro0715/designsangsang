@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>디자인상상 · 전자계약서</title>
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+:root{
+  --bg:#F2EEDF; --surface:#FFFFFF; --surface-2:#F7F4EA; --ink:#2B2620; --ink-dim:#6B6357; --ink-faint:#9A9280;
+  --line:#E4DCC8; --line-strong:#D8CDAF; --accent:#8A5A2B; --accent-deep:#6E4620; --accent-soft:#F0E2CC;
+  --danger:#9C3B2E; --radius:12px; --shadow:0 2px 10px rgba(60,50,30,.08);
+}
+*{box-sizing:border-box;}
+body{margin:0; font-family:'Pretendard',-apple-system,sans-serif; background:var(--bg); color:var(--ink); line-height:1.5;}
+.wrap{max-width:720px; margin:0 auto; padding:28px 18px 80px;}
+.center-note{max-width:480px; margin:100px auto; text-align:center; background:var(--surface); border-radius:var(--radius); box-shadow:var(--shadow); padding:36px 28px;}
+.center-note h2{margin:0 0 10px;}
+.center-note p{color:var(--ink-dim); font-size:13.5px;}
+.header{text-align:center; margin-bottom:22px;}
+.header .brand{font-size:12px; font-weight:800; letter-spacing:.08em; color:var(--accent);}
+.header h1{margin:4px 0 0; font-size:22px;}
+.card{background:var(--surface); border-radius:var(--radius); box-shadow:var(--shadow); padding:22px 20px; margin-bottom:16px;}
+.card h3{margin:0 0 12px; font-size:14px; letter-spacing:-.01em;}
+.meta-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px 18px; font-size:13px;}
+.meta-grid div span{display:block; font-size:11px; color:var(--ink-faint); margin-bottom:2px;}
+table.items{width:100%; border-collapse:collapse; font-size:12.5px;}
+table.items th{text-align:left; font-size:10.5px; color:var(--ink-faint); border-bottom:1.5px solid var(--ink); padding:6px 4px;}
+table.items td{padding:7px 4px; border-bottom:1px solid var(--line);}
+table.items .num{text-align:right;}
+.grand-row{display:flex; justify-content:space-between; align-items:center; margin-top:14px; padding-top:14px; border-top:2px solid var(--ink); font-weight:800; font-size:16px;}
+.terms-block{font-size:13px; white-space:pre-wrap; color:var(--ink-dim); line-height:1.7;}
+.sign-canvas-wrap{border:1.5px dashed var(--line-strong); border-radius:10px; background:var(--surface-2); touch-action:none;}
+#sign-canvas{display:block; width:100%; height:220px; touch-action:none;}
+.sign-actions{display:flex; gap:8px; margin-top:10px;}
+.field label{display:block; font-size:11.5px; font-weight:700; color:var(--ink-dim); margin-bottom:6px;}
+.field input[type="text"]{width:100%; padding:11px 12px; border:1.3px solid var(--line-strong); border-radius:8px; font-size:14px;}
+.agree-row{display:flex; align-items:flex-start; gap:8px; font-size:12.5px; color:var(--ink-dim); margin:14px 0;}
+button{font-family:inherit; cursor:pointer;}
+.btn{padding:11px 18px; border-radius:9px; font-size:13.5px; font-weight:700; border:1.3px solid var(--line-strong); background:var(--surface);}
+.btn-primary{background:var(--accent); color:#fff; border-color:var(--accent); width:100%; padding:15px; font-size:15px;}
+.btn-primary:disabled{opacity:.5;}
+.btn-ghost{background:transparent;}
+.success-box{text-align:center; padding:20px 0;}
+.success-box .ico{font-size:40px;}
+.download-link{display:inline-block; margin-top:14px; padding:12px 22px; background:var(--accent-deep); color:#fff; border-radius:9px; text-decoration:none; font-weight:700; font-size:13.5px;}
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <div class="center-note">불러오는 중…</div>
+</div>
+<script>
+const SUPABASE_URL = 'https://guuksmffmhgzbqlouvib.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_xgFitqhmRMlA00fD-LXJgw_HHu2TyNX';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const $app = document.getElementById('app');
+
+function won(n){ return Math.round(n||0).toLocaleString('ko-KR'); }
+function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+let CONTRACT = null;
+let sigCanvas, sigCtx, sigHasDrawn = false;
+
+async function init(){
+  const token = new URLSearchParams(window.location.search).get('token');
+  if(!token){ renderError('잘못된 링크예요. 계약서 링크를 다시 확인해 주세요.'); return; }
+  const { data, error } = await sb.rpc('get_contract_by_token', { p_token: token });
+  if(error || !data || data.length===0){ renderError('계약서를 찾을 수 없어요. 링크가 만료되었거나 잘못됐을 수 있어요.'); return; }
+  CONTRACT = data[0];
+  if(CONTRACT.status === 'signed'){ renderAlreadySigned(); return; }
+  renderContract();
+}
+function renderError(msg){
+  $app.innerHTML = '<div class="center-note"><h2>⚠️ 확인이 필요해요</h2><p>'+escapeHtml(msg)+'</p></div>';
+}
+function renderAlreadySigned(){
+  const pdfUrl = CONTRACT.pdf_path ? SUPABASE_URL+'/storage/v1/object/public/contracts/'+CONTRACT.pdf_path : null;
+  $app.innerHTML = '<div class="center-note">'+
+    '<h2>✅ 이미 서명이 완료됐어요</h2>'+
+    '<p>'+ (CONTRACT.signed_at? new Date(CONTRACT.signed_at).toLocaleString('ko-KR')+' 서명 완료' : '') +'</p>'+
+    (pdfUrl ? '<a class="download-link" href="'+pdfUrl+'" target="_blank">계약서 PDF 다운로드</a>' : '')+
+  '</div>';
+}
+function itemRowsHTML(){
+  return CONTRACT.line_items.map(it=>
+    '<tr><td>'+escapeHtml(it.n)+(it.s?' <span style="color:#999">('+escapeHtml(it.s)+')</span>':'')+(it.opt?' <b style="color:var(--accent)">[옵션]</b>':'')+'</td>'+
+    '<td>'+escapeHtml(it.u)+'</td><td class="num">'+it.q+'</td><td class="num">'+won(it.amt)+'</td></tr>'
+  ).join('');
+}
+function renderContract(){
+  const c = CONTRACT;
+  $app.innerHTML = ''+
+  '<div class="header"><div class="brand">DESIGN SANGSANG</div><h1>인테리어 공사 전자계약서</h1></div>'+
+  '<div class="card">'+
+    '<h3>계약 당사자</h3>'+
+    '<div class="meta-grid">'+
+      '<div><span>공급자</span>디자인상상</div>'+
+      '<div><span>고객명</span>'+escapeHtml(c.customer_name||'-')+'</div>'+
+      '<div><span>공사 시작일</span>'+(c.construction_start||'미정')+'</div>'+
+      '<div><span>공사 종료일</span>'+(c.construction_end||'미정')+'</div>'+
+    '</div>'+
+  '</div>'+
+  '<div class="card">'+
+    '<h3>견적 내역 — '+escapeHtml(c.quote_label||'')+' ('+(c.quote_type==='direct'?'직영공사':'턴키')+')</h3>'+
+    '<table class="items"><thead><tr><th>품명</th><th>단위</th><th class="num">수량</th><th class="num">금액</th></tr></thead><tbody>'+itemRowsHTML()+'</tbody></table>'+
+    '<div class="grand-row"><span>총 계약 금액</span><span>₩ '+won(c.total)+'</span></div>'+
+  '</div>'+
+  (c.payment_terms ? '<div class="card"><h3>결제 조건</h3><div class="terms-block">'+escapeHtml(c.payment_terms)+'</div></div>' : '')+
+  (c.special_terms ? '<div class="card"><h3>특약사항</h3><div class="terms-block">'+escapeHtml(c.special_terms)+'</div></div>' : '')+
+  '<div class="card">'+
+    '<h3>서명</h3>'+
+    '<div class="field" style="margin-bottom:14px;"><label>서명자 이름</label><input type="text" id="signer-name" placeholder="계약자 성함을 입력하세요"></div>'+
+    '<label style="font-size:11.5px; font-weight:700; color:var(--ink-dim); display:block; margin-bottom:6px;">아래 네모 안에 손가락 또는 마우스로 서명해 주세요</label>'+
+    '<div class="sign-canvas-wrap"><canvas id="sign-canvas"></canvas></div>'+
+    '<div class="sign-actions"><button class="btn btn-ghost" id="btn-clear-sign">지우기</button></div>'+
+    '<div class="agree-row"><input type="checkbox" id="agree-check"><label for="agree-check">위 계약 내용을 확인했으며 이에 동의합니다.</label></div>'+
+    '<button class="btn btn-primary" id="btn-submit-sign">서명 완료하고 계약서 저장</button>'+
+  '</div>';
+  setupCanvas();
+  document.getElementById('btn-clear-sign').addEventListener('click', clearCanvas);
+  document.getElementById('btn-submit-sign').addEventListener('click', submitSignature);
+}
+function setupCanvas(){
+  sigCanvas = document.getElementById('sign-canvas');
+  const ratio = window.devicePixelRatio || 1;
+  const rect = sigCanvas.getBoundingClientRect();
+  sigCanvas.width = rect.width * ratio;
+  sigCanvas.height = 220 * ratio;
+  sigCtx = sigCanvas.getContext('2d');
+  sigCtx.scale(ratio, ratio);
+  sigCtx.lineWidth = 2.4;
+  sigCtx.lineCap = 'round';
+  sigCtx.strokeStyle = '#2B2620';
+  let drawing = false;
+  function pos(e){
+    const r = sigCanvas.getBoundingClientRect();
+    const p = e.touches ? e.touches[0] : e;
+    return { x: p.clientX - r.left, y: p.clientY - r.top };
+  }
+  function start(e){ e.preventDefault(); drawing = true; sigHasDrawn = true; const p = pos(e); sigCtx.beginPath(); sigCtx.moveTo(p.x, p.y); }
+  function move(e){ if(!drawing) return; e.preventDefault(); const p = pos(e); sigCtx.lineTo(p.x, p.y); sigCtx.stroke(); }
+  function end(){ drawing = false; }
+  sigCanvas.addEventListener('mousedown', start);
+  sigCanvas.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', end);
+  sigCanvas.addEventListener('touchstart', start, {passive:false});
+  sigCanvas.addEventListener('touchmove', move, {passive:false});
+  sigCanvas.addEventListener('touchend', end);
+}
+function clearCanvas(){
+  sigCtx.clearRect(0,0,sigCanvas.width,sigCanvas.height);
+  sigHasDrawn = false;
+}
+async function submitSignature(){
+  const name = document.getElementById('signer-name').value.trim();
+  const agree = document.getElementById('agree-check').checked;
+  if(!name){ alert('서명자 이름을 입력해 주세요.'); return; }
+  if(!sigHasDrawn){ alert('서명란에 서명을 그려 주세요.'); return; }
+  if(!agree){ alert('계약 내용에 동의해 주세요.'); return; }
+  const btn = document.getElementById('btn-submit-sign');
+  btn.disabled = true; btn.textContent = '저장하는 중…';
+
+  const signatureImage = sigCanvas.toDataURL('image/png');
+
+  // 서명 이미지를 포함한 최종 계약서 화면을 만들어 PDF로 변환
+  const printEl = document.createElement('div');
+  printEl.style.padding = '20px';
+  printEl.innerHTML = document.querySelector('.wrap').innerHTML
+    .replace(/<div class="card">\s*<h3>서명<\/h3>[\s\S]*$/, '');
+  printEl.innerHTML += '<div class="card"><h3>서명</h3>'+
+    '<div class="meta-grid"><div><span>서명자</span>'+escapeHtml(name)+'</div><div><span>서명일시</span>'+new Date().toLocaleString('ko-KR')+'</div></div>'+
+    '<img src="'+signatureImage+'" style="max-width:280px; margin-top:10px; border:1px solid #ddd; border-radius:8px;">'+
+  '</div>';
+  document.body.appendChild(printEl);
+
+  try{
+    const pdfBlob = await html2pdf().set({
+      margin: 10,
+      filename: 'contract.pdf',
+      html2canvas: { scale: 2 },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    }).from(printEl).outputPdf('blob');
+    document.body.removeChild(printEl);
+
+    const pdfPath = 'signed/'+CONTRACT.id+'-'+Date.now()+'.pdf';
+    const { error: upErr } = await sb.storage.from('contracts').upload(pdfPath, pdfBlob, { contentType:'application/pdf' });
+    if(upErr) throw upErr;
+
+    const { error: signErr } = await sb.rpc('sign_contract', {
+      p_token: new URLSearchParams(window.location.search).get('token'),
+      p_signer_name: name,
+      p_signature_image: signatureImage,
+      p_pdf_path: pdfPath,
+    });
+    if(signErr) throw signErr;
+
+    const pdfUrl = SUPABASE_URL+'/storage/v1/object/public/contracts/'+pdfPath;
+    $app.innerHTML = '<div class="center-note success-box">'+
+      '<div class="ico">✅</div><h2>서명이 완료됐어요</h2>'+
+      '<p>계약서가 저장됐어요. 아래에서 PDF를 내려받으실 수 있어요.</p>'+
+      '<a class="download-link" href="'+pdfUrl+'" target="_blank">계약서 PDF 다운로드</a>'+
+    '</div>';
+  }catch(err){
+    document.body.contains(printEl) && document.body.removeChild(printEl);
+    btn.disabled = false; btn.textContent = '서명 완료하고 계약서 저장';
+    alert('저장 중 문제가 발생했어요: '+(err.message||err));
+  }
+}
+init();
+</script>
+</body>
+</html>

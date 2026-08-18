@@ -616,6 +616,15 @@ table.items tbody tr.has-qty:hover{background:#F8F0DC;}
 .carpenter-days-input{width:80px; padding:8px 9px; border:1.3px solid var(--line-strong); border-radius:7px; font-size:13.5px; text-align:right; font-weight:700;}
 .carpenter-total{font-weight:800; color:var(--accent-deep);}
 .carpenter-box-hint{font-size:11px; color:var(--ink-faint); margin-top:8px;}
+tr.qadjust-row{background:var(--accent-soft);}
+.quote-adjust-input{width:78px; text-align:right;}
+.action-row .btn-secondary.active{background:var(--accent); color:#fff; border-color:var(--accent);}
+.field-row-2{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+.config-form .field textarea{width:100%; padding:9px 10px; border:1.3px solid var(--line-strong); border-radius:8px; font-size:13px; font-family:inherit; resize:vertical;}
+.ct-link-box{margin-top:18px; background:var(--surface-2); border:1.3px dashed var(--line-strong); border-radius:10px; padding:16px;}
+.ct-link-label{font-size:12px; font-weight:700; color:var(--ink-dim); margin-bottom:8px;}
+.ct-link-row{display:flex; gap:8px;}
+.ct-link-row input{flex:1; padding:9px 10px; border:1.3px solid var(--line-strong); border-radius:8px; font-size:12.5px; background:var(--surface);}
 
 </style>
 </head>
@@ -727,6 +736,8 @@ const state = {
   quoteConfig: { feePercent:15, adminFeeMode:'fixed', adminFeeValue:1000000, carpenterDayWage:350000, tileDayWage:250000, filmDayWage:250000, electricDayWage:250000, vatOnFeeDefault:true },
   windowPositions: [], // 창호 위치 목록 (서버에서 불러옴)
   adminMoveSelected: {}, // 설정 화면: 다른 공종으로 이동시킬 항목 체크 상태 (key `${group}|${i}` -> true)
+  quoteAdjustMode: false,   // 이 견적서 안에서만 단가·마진 조정하는 모드 on/off
+  quoteItemOverride: {},    // 이 견적서 전용 단가·마진 수정값 (key `${group}|${i}` -> {mat?,labor?,exp?,mo?}) - 서버 기본 단가표에는 영향 없음
   carpenterDaysOverride: {}, // 목공사 품수 수동 조정값 (group -> number|null)
 };
 let customSeq = 1;
@@ -770,6 +781,20 @@ function effItem(group, i){
     subcat: ov.subcat !== undefined ? ov.subcat : '',
   };
 }
+/* 이 견적서에서만 적용되는 단가·마진 조정 (서버 기본 단가표는 그대로 유지) */
+function effItemQ(group, i){
+  const base = effItem(group, i);
+  if(state.mode !== 'quote') return base; // 설정(admin) 화면에서는 항상 기본값만 보여줌
+  const ov = state.quoteItemOverride[group+"|"+i];
+  if(!ov) return base;
+  return Object.assign({}, base, ov);
+}
+function setQuoteItemField(group, i, field, value){
+  const k = group+"|"+i;
+  const cur = state.quoteItemOverride[k] || {};
+  state.quoteItemOverride[k] = Object.assign({}, cur, {[field]: value});
+  saveDraft();
+}
 /* 철거 및 설비(카테고리 2) 전용 소분류 정렬 */
 const SUBCAT_ORDER = ["일반철거","일반설비","바닥철거","기타","욕실철거","욕실설비"];
 function orderedItemIndices(group){
@@ -786,7 +811,7 @@ function categoryMargin(group){
   return state.marginOverride[group] !== undefined ? state.marginOverride[group] : CATALOG[group].margin;
 }
 function computePrice(group, i){
-  const it = effItem(group, i);
+  const it = effItemQ(group, i);
   const isDirect = state.meta.quoteType === 'direct';
   const m = isDirect ? 0 : ((it.mo !== undefined && it.mo !== null) ? it.mo : categoryMargin(group));
   let total = 0;
@@ -991,17 +1016,17 @@ function removeCustom(group, id){
 }
 /* ---- 목공사(카테고리 4) 직영모드 전용: 노무비를 목수 품수로 환산 ---- */
 function itemMaterialRaw(group, i){
-  const it = effItem(group, i);
+  const it = effItemQ(group, i);
   if(it.mat===undefined || it.mat===null) return 0;
   return roundUp(it.mat, it.mp);
 }
 function itemLaborRaw(group, i){
-  const it = effItem(group, i);
+  const it = effItemQ(group, i);
   if(it.labor===undefined || it.labor===null) return 0;
   return roundUp(it.labor, it.lp);
 }
 function itemExpenseRaw(group, i){
-  const it = effItem(group, i);
+  const it = effItemQ(group, i);
   if(it.exp===undefined || it.exp===null) return 0;
   return roundUp(it.exp, it.ep);
 }
@@ -1124,7 +1149,7 @@ function saveDraft(){
       qty: state.qty, custom: state.custom,
       meta: state.meta, selected: state.selected, phase: state.phase, flow: state.flow, selectIdx: state.selectIdx, catView: state.catView,
       customerId: state.customerId, currentQuoteId: state.currentQuoteId,
-      carpenterDaysOverride: state.carpenterDaysOverride,
+      carpenterDaysOverride: state.carpenterDaysOverride, quoteItemOverride: state.quoteItemOverride, quoteAdjustMode: state.quoteAdjustMode,
     }));
   }catch(e){ /* storage unavailable (e.g. private mode) -- fail silently */ }
 }
@@ -1144,6 +1169,8 @@ function loadDraft(){
     state.customerId = obj.customerId || null;
     state.currentQuoteId = obj.currentQuoteId || null;
     state.carpenterDaysOverride = obj.carpenterDaysOverride || {};
+    state.quoteItemOverride = obj.quoteItemOverride || {};
+    state.quoteAdjustMode = obj.quoteAdjustMode || false;
     if(state.phase === 'build' && selectedCountAll()===0) backfillSelectedFromQty();
   }catch(e){ /* ignore corrupt draft */ }
 }
@@ -1156,6 +1183,15 @@ async function fetchSavedQuotes(){
   state.savedQuotesCache = error ? [] : (data||[]);
   return state.savedQuotesCache;
 }
+function autoQuoteLabel(){
+  const now = new Date();
+  const yy = String(now.getFullYear()).slice(2);
+  const mm = String(now.getMonth()+1).padStart(2,'0');
+  const dd = String(now.getDate()).padStart(2,'0');
+  const hh = String(now.getHours()).padStart(2,'0');
+  const base = state.meta.customer || state.meta.project || '견적';
+  return base+'_'+yy+mm+dd+hh;
+}
 async function saveCurrentAsSnapshot(label, forceNew){
   const t = computeTotals();
   const id = (!forceNew && state.currentQuoteId) ? state.currentQuoteId : uid('q');
@@ -1163,14 +1199,14 @@ async function saveCurrentAsSnapshot(label, forceNew){
   const row = {
     id,
     customer_id: state.customerId || null,
-    label: label || state.meta.customer || state.meta.project || '(이름 없음)',
+    label: label || autoQuoteLabel(),
     total: t.grand,
     quote_type: state.meta.quoteType || 'turnkey',
     created_by: user ? user.id : null,
     snapshot: {
       qty: state.qty, custom: state.custom,
       priceOverride: state.priceOverride, marginOverride: state.marginOverride,
-      meta: state.meta, selected: state.selected, carpenterDaysOverride: state.carpenterDaysOverride,
+      meta: state.meta, selected: state.selected, carpenterDaysOverride: state.carpenterDaysOverride, quoteItemOverride: state.quoteItemOverride,
     },
   };
   const { error } = await sb.from('quotes').upsert(row);
@@ -1192,6 +1228,7 @@ async function loadSnapshot(id){
   updateQuoteTypeSwitch();
   state.selected = d.selected || {};
   state.carpenterDaysOverride = d.carpenterDaysOverride || {};
+  state.quoteItemOverride = d.quoteItemOverride || {};
   if(selectedCountAll()===0) backfillSelectedFromQty();
   state.phase = 'build';
   state.flow = state.flow || 'solo';
@@ -1483,7 +1520,7 @@ function bindConsultEvents(cid, view){
 
 function rowPriceParts(group, i){
   // 재료비/노무비/경비를 각각 마진 반영한 값으로 분리 (직영모드는 마진 0, 목공사 직영은 노무비 제외)
-  const it = effItem(group, i);
+  const it = effItemQ(group, i);
   if(isCarpenterDirectGroup(group)){
     return { mat: itemMaterialRaw(group,i), labor: 0, exp: itemExpenseRaw(group,i) };
   }
@@ -1500,19 +1537,26 @@ function rowDisplayPrice(group, i){
   return computePrice(group, i);
 }
 function itemRowHTML(group, i){
-  const it = effItem(group, i);
+  const it = effItemQ(group, i);
   const parts = rowPriceParts(group, i);
   const price = parts.mat + parts.labor + parts.exp;
   const st = getQty(group,i);
   const amt = lineAmt(price, st.q);
+  const adj = state.quoteAdjustMode;
+  const costCell = (val, field)=> adj
+    ? '<input type="text" inputmode="numeric" class="cost-input num money-input quote-adjust-input" value="'+fmtNum(val||'')+'" data-role="qadjust" data-field="'+field+'" data-group="'+group+'" data-i="'+i+'" onfocus="this.select()">'
+    : (val>0?won(val):'');
+  const marginCell = adj
+    ? '<input type="number" step="0.1" class="cost-input num" style="width:56px;" placeholder="기본" value="'+(it.mo!==undefined&&it.mo!==null?pct(it.mo):'')+'" data-role="qadjust-margin" data-group="'+group+'" data-i="'+i+'" onfocus="this.select()">'
+    : '';
   return ''+
-  '<tr class="'+(st.q>0?'has-qty':'')+'">'+
+  '<tr class="'+(st.q>0?'has-qty':'')+(adj?' qadjust-row':'')+'">'+
     '<td class="col-idx num">'+(i+1)+'</td>'+
-    '<td class="col-name"><div class="item-name">'+escapeHtml(it.n)+'</div>'+(it.s?'<div class="item-spec">'+escapeHtml(it.s)+'</div>':'')+'</td>'+
+    '<td class="col-name"><div class="item-name">'+escapeHtml(it.n)+'</div>'+(it.s?'<div class="item-spec">'+escapeHtml(it.s)+'</div>':'')+(adj?'<div class="item-spec">개별 마진율 '+marginCell+' %</div>':'')+'</td>'+
     '<td class="col-unit">'+escapeHtml(it.u)+'</td>'+
-    '<td class="col-cost num">'+(parts.mat>0?won(parts.mat):'')+'</td>'+
-    '<td class="col-cost num">'+(parts.labor>0?won(parts.labor):'')+'</td>'+
-    '<td class="col-cost num">'+(parts.exp>0?won(parts.exp):'')+'</td>'+
+    '<td class="col-cost num">'+costCell(parts.mat,'mat')+'</td>'+
+    '<td class="col-cost num">'+costCell(parts.labor,'labor')+'</td>'+
+    '<td class="col-cost num">'+costCell(parts.exp,'exp')+'</td>'+
     '<td class="col-opt"><input type="checkbox" class="opt-check" '+(st.opt?'checked':'')+' data-role="opt" data-group="'+group+'" data-i="'+i+'" title="옵션 공사로 표시"></td>'+
     '<td class="col-qty"><input type="number" min="0" step="1" class="qty-input num" value="'+(st.q||'')+'" placeholder="0" data-role="qty" data-group="'+group+'" data-i="'+i+'" onfocus="this.select()"></td>'+
     '<td class="col-amt num"><span class="amt-text">'+(st.q>0? won(amt) : '')+'</span> <button class="btn-remove" data-role="item-del" data-group="'+group+'" data-i="'+i+'" title="이 견적에서 삭제">×</button></td>'+
@@ -1669,7 +1713,88 @@ function adminRowHTML(group, i){
     '<td class="col-final num"><span class="final-price">'+(price>0? won(price):'')+'</span></td>'+
   '</tr>';
 }
-/* ============ 항목 순서 변경 / 카테고리 이동 ============ */
+/* ============ 전자계약(서명) ============ */
+function buildLineItemsForContract(){
+  const items = [];
+  CAT_ORDER.forEach(cid=>{
+    CAT_GROUPS[cid].forEach(group=>{
+      CATALOG[group].items.forEach((raw,i)=>{
+        const st = getQty(group,i);
+        if(st.q>0){
+          const it = effItemQ(group,i);
+          const parts = rowPriceParts(group,i);
+          const price = parts.mat+parts.labor+parts.exp;
+          items.push({ n:it.n, s:it.s||'', u:it.u, q:st.q, price, amt:lineAmt(price,st.q), opt:!!st.opt });
+        }
+      });
+      getCustomList(group).forEach(it=>{
+        if(it.q>0) items.push({ n:it.n, s:it.s||'', u:it.u, q:it.q, price:it.p, amt:lineAmt(it.p,it.q), opt:!!it.opt });
+      });
+    });
+  });
+  return items;
+}
+function renderContractForm(){
+  const t = computeTotals();
+  let body = '<div class="cat-head"><div class="eyebrow">전자계약</div><h2>계약서 만들기</h2>'+
+    '<button class="btn-secondary" style="flex:none;padding:8px 14px;" id="ct-back-btn">← 저장된 견적으로</button>'+
+    '</div>';
+  body += '<div class="margin-box">'+
+    '<div class="margin-box-label">'+escapeHtml(state.meta.customer||'(고객명 없음)')+' · '+escapeHtml(state.meta.project||'')+'</div>'+
+    '<div class="config-desc">견적 총액 ₩ '+won(t.grand)+' 기준으로 계약서가 만들어져요. 견적 내용은 지금 이 시점 그대로 고정돼서 저장돼요.</div>'+
+  '</div>';
+  body += '<div class="config-form">'+
+    '<div class="field-row-2">'+
+      '<div class="field"><label>공사 시작일</label><input type="date" id="ct-start"></div>'+
+      '<div class="field"><label>공사 종료일</label><input type="date" id="ct-end"></div>'+
+    '</div>'+
+    '<div class="field"><label>결제 조건</label><textarea id="ct-payment" rows="3" placeholder="예: 계약금 30% 계약 시, 중도금 40% 착공 시, 잔금 30% 준공 후 7일 이내"></textarea></div>'+
+    '<div class="field"><label>특약사항</label><textarea id="ct-special" rows="4" placeholder="추가로 명시할 조건이 있으면 입력하세요."></textarea></div>'+
+    '<button class="btn-primary" id="ct-create-btn" style="flex:none;padding:12px 22px;">계약서 링크 생성</button>'+
+    '<div id="ct-result"></div>'+
+  '</div>';
+  $main.innerHTML = body;
+  document.getElementById('ct-back-btn').addEventListener('click', ()=>{ state.mode='saved'; renderAll(); });
+  document.getElementById('ct-create-btn').addEventListener('click', async ()=>{
+    const btn = document.getElementById('ct-create-btn');
+    if(!state.customerId){ alert('이 견적은 고객이 연결되어 있지 않아요. 사업 운영 플랫폼의 고객 상세에서 견적을 다시 시작해 주세요.'); return; }
+    btn.disabled = true; btn.textContent = '생성 중…';
+    const { data: cust } = await sb.from('customers').select('name, phone').eq('id', state.customerId).single();
+    const lineItems = buildLineItemsForContract();
+    const row = {
+      customer_id: state.customerId,
+      customer_name: cust ? cust.name : (state.meta.customer||''),
+      customer_phone: cust ? cust.phone : '',
+      quote_id: state.currentQuoteId || null,
+      quote_label: state.meta.customer || state.meta.project || autoQuoteLabel(),
+      quote_type: state.meta.quoteType || 'turnkey',
+      line_items: lineItems,
+      total: t.grand,
+      construction_start: document.getElementById('ct-start').value || null,
+      construction_end: document.getElementById('ct-end').value || null,
+      payment_terms: document.getElementById('ct-payment').value.trim(),
+      special_terms: document.getElementById('ct-special').value.trim(),
+    };
+    const { data: inserted, error } = await sb.from('contracts').insert(row).select('token').single();
+    btn.disabled = false; btn.textContent = '계약서 링크 생성';
+    if(error){ alert('계약서 생성에 실패했어요: '+error.message); return; }
+    const link = window.location.origin + '/contract-sign.html?token=' + inserted.token;
+    document.getElementById('ct-result').innerHTML =
+      '<div class="ct-link-box">'+
+        '<div class="ct-link-label">고객에게 이 링크를 보내주세요 (문자·카카오톡 등)</div>'+
+        '<div class="ct-link-row"><input type="text" readonly value="'+escapeHtml(link)+'" id="ct-link-input"><button class="btn-secondary" id="ct-copy-btn" style="flex:none;">복사</button></div>'+
+      '</div>';
+    document.getElementById('ct-copy-btn').addEventListener('click', ()=>{
+      const input = document.getElementById('ct-link-input');
+      input.select();
+      navigator.clipboard.writeText(input.value).then(()=>{
+        const b = document.getElementById('ct-copy-btn'); b.textContent='복사됨 ✓'; setTimeout(()=>{b.textContent='복사';},1500);
+      });
+    });
+  });
+}
+
+
 function getGroupPairs(group){
   return CATALOG[group].items.map((item,i)=>({item, override: state.priceOverride[group+"|"+i]}));
 }
@@ -1804,6 +1929,7 @@ function adminTableHTML(group){
 /* ============ Main render ============ */
 function renderMain(){
   if(state.mode === 'saved'){ renderSavedView(); return; }
+  if(state.mode === 'contract'){ renderContractForm(); return; }
   if(state.mode === 'quote' && state.phase === 'picker'){
     $main.innerHTML = pickerHTML(); bindPickerEvents(); return;
   }
@@ -1877,6 +2003,29 @@ function bindMainEvents(){
       el.addEventListener('change', e=>{
         setQty(e.target.dataset.group, parseInt(e.target.dataset.i,10), {opt:e.target.checked});
         renderSummary();
+      });
+    });
+    $main.querySelectorAll('[data-role="qadjust"]').forEach(el=>{
+      el.addEventListener('input', e=>{
+        const group = e.target.dataset.group, i = parseInt(e.target.dataset.i,10), field = e.target.dataset.field;
+        const v = parseCommaNum(e.target.value);
+        setQuoteItemField(group, i, field, v);
+        const tr = e.target.closest('tr');
+        const parts = rowPriceParts(group, i);
+        const price = parts.mat + parts.labor + parts.exp;
+        const st = getQty(group,i);
+        updateRowAmount(tr, price, st.q);
+        updateSubtotalDisplay(group);
+        renderNav(); renderSummaryOnly();
+      });
+    });
+    $main.querySelectorAll('[data-role="qadjust-margin"]').forEach(el=>{
+      el.addEventListener('input', e=>{
+        const group = e.target.dataset.group, i = parseInt(e.target.dataset.i,10);
+        const raw = e.target.value;
+        const v = raw === '' ? undefined : Number(raw)/100;
+        setQuoteItemField(group, i, 'mo', v);
+        renderMain(); // 재료비/노무비/경비 표시값이 마진 반영해서 다시 계산되므로 다시 그림
       });
     });
     $main.querySelectorAll('[data-role="c-qty"]').forEach(el=>{
@@ -2104,7 +2253,7 @@ function renderSavedView(){
   html += '<div class="save-box">'+
     '<div class="save-box-title">현재 작업 중인 견적을 이름 붙여 저장</div>'+
     '<div class="save-box-row">'+
-      '<input type="text" id="save-name-input" placeholder="고객명 / 프로젝트명" value="'+escapeHtml(state.meta.customer||state.meta.project||'')+'">'+
+      '<input type="text" id="save-name-input" placeholder="고객명 / 프로젝트명" value="'+escapeHtml(autoQuoteLabel())+'">'+
       '<button class="btn-add" id="btn-save-snapshot">'+(state.currentQuoteId?'수정 저장':'현재 견적 저장')+'</button>'+
       (state.currentQuoteId ? '<button class="btn-secondary" id="btn-save-as-new" style="flex:none;">새 견적으로 저장</button>' : '')+
     '</div>'+
@@ -2125,6 +2274,7 @@ function renderSavedView(){
         '</div>'+
         '<div class="saved-item-actions">'+
           '<button class="btn-secondary" data-role="load-snap" data-id="'+s.id+'">불러오기</button>'+
+          '<button class="btn-secondary" data-role="make-contract" data-id="'+s.id+'">전자계약서 만들기</button>'+
           '<button class="btn-remove-snap" data-role="del-snap" data-id="'+s.id+'" title="삭제">×</button>'+
         '</div>'+
       '</div>';
@@ -2156,6 +2306,13 @@ function renderSavedView(){
       if(confirm('저장된 견적을 불러오면 현재 작업 중인 내용은 덮어씌워집니다. 계속할까요?')){
         await loadSnapshot(e.target.dataset.id);
       }
+    });
+  });
+  $main.querySelectorAll('[data-role="make-contract"]').forEach(el=>{
+    el.addEventListener('click', async e=>{
+      await loadSnapshot(e.target.dataset.id);
+      state.mode = 'contract';
+      renderAll();
     });
   });
   $main.querySelectorAll('[data-role="del-snap"]').forEach(el=>{
@@ -2202,9 +2359,11 @@ function summaryHTML(){
     '<button class="btn-primary" id="btn-print">견적서 출력</button>'+
   '</div>';
   html += '<div class="action-row">'+
-    '<button class="btn-secondary" id="btn-reset-price" style="flex:1 1 100%;">단가·마진 전체 초기화</button>'+
+    '<button class="btn-secondary '+(state.quoteAdjustMode?'active':'')+'" id="btn-adjust-toggle" style="flex:1 1 100%;">'+(state.quoteAdjustMode?'✓ 이 견적 단가·마진 조정 중 (끄기)':'이 견적만 단가·마진율 조정')+'</button>'+
   '</div>';
-  html += '<div class="footnote">단가 탭에서 재료비·노무비·경비와 마진율을 주기적으로 조정할 수 있습니다. 창호 특수 사이즈, 맞춤 제작 품목 등은 "직접 입력"으로 추가해 주세요.</div>';
+  html += '<div class="footnote">'+(state.quoteAdjustMode
+    ? '지금 이 견적서 안에서만 항목별 재료비·노무비·경비·마진율을 바로 조정할 수 있어요. 여기서 바꿔도 다른 견적이나 기본 단가표(설정)에는 전혀 영향이 없어요.'
+    : '단가·마진을 이 견적서에서만 바꾸고 싶으면 위 버튼을 눌러 조정 모드를 켜세요. 전체 기본 단가를 바꾸려면 "설정 → 견적관리설정"을 이용해 주세요.')+'</div>';
   return html;
 }
 function renderSummary(){
@@ -2225,10 +2384,9 @@ function bindSummaryEvents(){
       saveDraft(); renderAll();
     }
   });
-  document.getElementById('btn-reset-price').addEventListener('click', ()=>{
-    if(confirm('모든 공종의 단가·마진율 수정 내역을 원본 값으로 초기화할까요?')){
-      resetAllPricing(); renderAll();
-    }
+  document.getElementById('btn-adjust-toggle').addEventListener('click', ()=>{
+    state.quoteAdjustMode = !state.quoteAdjustMode;
+    saveDraft(); renderAll();
   });
   document.getElementById('btn-print').addEventListener('click', buildPrintView);
 }
@@ -2263,16 +2421,16 @@ function bindMeta(){
   });
   document.getElementById('quick-save-btn').addEventListener('click', async ()=>{
     const btn = document.getElementById('quick-save-btn');
-    const label = state.meta.customer || state.meta.project || '(이름 없음)';
     if(!state.meta.customer && !state.meta.project){
       alert('저장하기 전에 고객명 또는 프로젝트명을 입력해 주세요.');
       return;
     }
+    const label = autoQuoteLabel();
     btn.disabled = true; btn.textContent = '저장 중…';
-    const ok = await saveCurrentAsSnapshot(label, false);
+    const ok = await saveCurrentAsSnapshot(label, true); // 내용이 바뀔 때마다 새 버전으로 저장
     btn.disabled = false;
-    btn.textContent = ok ? '저장됨 ✓' : '저장 실패';
-    setTimeout(()=>{ if(document.body.contains(btn)) btn.textContent = '이 견적 저장'; }, 1500);
+    btn.textContent = ok ? '저장됨 ('+label+') ✓' : '저장 실패';
+    setTimeout(()=>{ if(document.body.contains(btn)) btn.textContent = '이 견적 저장'; }, 2000);
   });
 }
 function updateQuoteTypeSwitch(){
@@ -2324,9 +2482,10 @@ function buildPrintView(){
     const meta = CAT_META[cid];
     let catRows = '';
     CAT_GROUPS[cid].forEach(group=>{
-      CATALOG[group].items.forEach((it,i)=>{
+      CATALOG[group].items.forEach((raw,i)=>{
         const st = getQty(group,i);
         if(st.q>0){
+          const it = effItemQ(group,i);
           const parts = rowPriceParts(group,i);
           const price = parts.mat+parts.labor+parts.exp;
           catRows += '<tr><td>'+escapeHtml(it.n)+(it.s?' <span style="color:#888">('+escapeHtml(it.s)+')</span>':'')+(st.opt?' <b style="color:#3E5C6B">[옵션]</b>':'')+'</td><td>'+escapeHtml(it.u)+'</td>'+
