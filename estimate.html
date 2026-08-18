@@ -1546,8 +1546,9 @@ function itemRowHTML(group, i){
   const costCell = (val, field)=> adj
     ? '<input type="text" inputmode="numeric" class="cost-input num money-input quote-adjust-input" value="'+fmtNum(val||'')+'" data-role="qadjust" data-field="'+field+'" data-group="'+group+'" data-i="'+i+'" onfocus="this.select()">'
     : (val>0?won(val):'');
+  const effMarginPct = (it.mo!==undefined&&it.mo!==null) ? pct(it.mo) : pct(categoryMargin(group));
   const marginCell = adj
-    ? '<input type="number" step="0.1" class="cost-input num" style="width:56px;" placeholder="기본" value="'+(it.mo!==undefined&&it.mo!==null?pct(it.mo):'')+'" data-role="qadjust-margin" data-group="'+group+'" data-i="'+i+'" onfocus="this.select()">'
+    ? '<input type="number" step="1" class="cost-input num" style="width:56px;" value="'+effMarginPct+'" data-role="qadjust-margin" data-group="'+group+'" data-i="'+i+'" onfocus="this.select()">'
     : '';
   return ''+
   '<tr class="'+(st.q>0?'has-qty':'')+(adj?' qadjust-row':'')+'">'+
@@ -1709,7 +1710,7 @@ function adminRowHTML(group, i){
     '<td class="col-cost">'+costCellHTML(group,i,'mat',it.mat,'재료비')+'</td>'+
     '<td class="col-cost">'+costCellHTML(group,i,'labor',it.labor,'노무비')+'</td>'+
     '<td class="col-cost">'+costCellHTML(group,i,'exp',it.exp,'경비')+'</td>'+
-    '<td class="col-margin"><input type="number" class="cost-input num margin-input" step="0.1" value="'+(it.mo!==undefined&&it.mo!==null? pct(it.mo):'')+'" placeholder="기본" data-role="item-margin" data-group="'+group+'" data-i="'+i+'" onfocus="this.select()"> %</td>'+
+    '<td class="col-margin"><input type="number" class="cost-input num margin-input" step="1" value="'+(it.mo!==undefined&&it.mo!==null? pct(it.mo):'')+'" placeholder="기본" data-role="item-margin" data-group="'+group+'" data-i="'+i+'" onfocus="this.select()"> %</td>'+
     '<td class="col-final num"><span class="final-price">'+(price>0? won(price):'')+'</span></td>'+
   '</tr>';
 }
@@ -1906,7 +1907,7 @@ function adminTableHTML(group){
   '<div class="margin-box" id="marginbox-'+group+'">'+
     '<div class="margin-box-label">'+escapeHtml(CATALOG[group].label)+' — 기본 마진율</div>'+
     '<div class="margin-box-row">'+
-      '<input type="number" class="margin-cat-input num" step="0.1" value="'+pct(margin)+'" data-role="cat-margin" data-group="'+group+'"> %'+
+      '<input type="number" class="margin-cat-input num" step="1" value="'+pct(margin)+'" data-role="cat-margin" data-group="'+group+'"> %'+
       '<span class="margin-box-hint">개별 항목에 마진율을 따로 입력하지 않으면 이 값이 적용됩니다. 빈 칸은 아직 등록되지 않은 항목이며, 품명과 단가를 입력하면 견적 작성 탭에 자동으로 나타납니다.</span>'+
       '<button class="btn-primary btn-reset-group" id="save-group-btn-'+group+'" data-role="save-group" data-group="'+group+'">저장</button>'+
     '</div>'+
