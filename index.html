@@ -87,6 +87,18 @@ input,select,textarea{font-family:inherit;}
 .tool-frame-topbar{flex:none; display:flex; align-items:center; gap:14px; padding:12px 20px; border-bottom:1px solid var(--line); font-size:13px; font-weight:700; color:var(--ink-dim);}
 
 .settings-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:14px; margin-top:20px;}
+
+.cust-search{width:100%; max-width:360px; padding:9px 12px; border:1.3px solid var(--line-strong); border-radius:8px; font-size:13px; margin:18px 0 14px;}
+.est-hub-list{display:flex; flex-direction:column; gap:10px;}
+.est-hub-card{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px;}
+.est-hub-card-head{display:flex; align-items:center; justify-content:space-between; gap:12px;}
+.est-hub-cust-name{font-size:14.5px; font-weight:800; color:var(--ink);}
+.est-hub-cust-sub{font-size:12px; color:var(--ink-faint); margin-top:2px;}
+.est-hub-quotes{margin-top:10px; padding-top:10px; border-top:1px dashed var(--line); display:flex; flex-direction:column; gap:4px;}
+.est-hub-quote-row{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:7px 8px; border-radius:6px; cursor:pointer; font-size:12.5px;}
+.est-hub-quote-row:hover{background:var(--surface-2);}
+.est-hub-quote-name{font-weight:700; color:var(--ink);}
+.est-hub-quote-meta{color:var(--ink-faint);}
 .settings-card{
   background:var(--surface); border:1.5px solid var(--line-strong); border-radius:12px;
   padding:20px 18px; text-align:left; cursor:pointer; transition:.15s;
@@ -728,7 +740,10 @@ function renderMain(){
   if(state.view==='dashboard') return renderDashboard();
   if(state.view==='schedule') return renderSchedule();
   if(state.view==='customers') return renderCustomers();
-  if(state.view==='estimate') return renderToolFrame('estimate.html'+(state.estimateQuery||''),'견적 관리');
+  if(state.view==='estimate'){
+    if(state.estimateQuery) return renderToolFrame('estimate.html'+state.estimateQuery,'견적 관리', true);
+    return renderEstimateHub();
+  }
   if(state.view==='kitchen') return renderToolFrame('kitchen.html','주방 견적 계산기');
   if(state.view==='tile') return renderToolFrame('tile.html','타일 수량 산출');
   if(state.view==='projects') return renderProjects();
@@ -959,11 +974,73 @@ function renderCustomers(){
 }
 
 /* ============ Estimate placeholder ============ */
-function renderToolFrame(src, title){
+function renderToolFrame(src, title, withBack){
   $main.innerHTML =
     '<div class="tool-frame-wrap">'+
+      (withBack ? '<div class="tool-frame-topbar"><button class="btn btn-ghost btn-sm" id="btn-frame-back">← 견적 관리로</button><span>'+escapeHtml(title)+'</span></div>' : '')+
       '<iframe class="tool-frame" src="'+src+'" title="'+escapeHtml(title)+'"></iframe>'+
     '</div>';
+  const backBtn = document.getElementById('btn-frame-back');
+  if(backBtn) backBtn.addEventListener('click', ()=>{ state.estimateQuery=''; renderMain(); });
+}
+
+/* ============ 견적 관리 허브: 고객별 견적 목록 ============ */
+async function renderEstimateHub(){
+  $main.innerHTML = '<div class="page-head"><div><h1>견적 관리</h1><div class="desc">고객별로 저장된 견적을 확인하고, 새 견적을 작성해요.</div></div></div>'+
+    '<div class="loading-note">불러오는 중…</div>';
+  const { data, error } = await sb.from('quotes').select('id, customer_id, label, total, created_at').order('created_at', {ascending:false});
+  if(state.view !== 'estimate') return; // 그 사이 다른 탭으로 이동한 경우
+  const quotesByCustomer = {};
+  const orphanQuotes = [];
+  (data||[]).forEach(q=>{
+    if(q.customer_id){ (quotesByCustomer[q.customer_id] = quotesByCustomer[q.customer_id]||[]).push(q); }
+    else { orphanQuotes.push(q); }
+  });
+
+  let html = '<div class="page-head"><div><h1>견적 관리</h1><div class="desc">고객별로 저장된 견적을 확인하고, 새 견적을 작성해요.</div></div></div>';
+  html += '<input type="text" id="est-hub-search" class="cust-search" placeholder="고객명으로 검색">';
+  html += '<div id="est-hub-list" class="est-hub-list"></div>';
+  if(orphanQuotes.length){
+    html += '<div class="detail-section-title" style="margin-top:24px;">고객 미연결 견적 ('+orphanQuotes.length+')</div>';
+    html += '<div class="est-hub-list">'+orphanQuotes.map(q=>estHubQuoteRowHTML(q)).join('')+'</div>';
+  }
+  $main.innerHTML = html;
+
+  function renderList(filterQ){
+    const box = document.getElementById('est-hub-list');
+    const list = state.customers.filter(c => !filterQ || c.name.toLowerCase().includes(filterQ.toLowerCase()));
+    if(list.length===0){ box.innerHTML = '<div class="empty-note">등록된 고객이 없어요. 먼저 "고객 관리"에서 고객을 등록해 주세요.</div>'; return; }
+    box.innerHTML = list.map(c=>{
+      const quotes = quotesByCustomer[c.id] || [];
+      return '<div class="est-hub-card">'+
+        '<div class="est-hub-card-head">'+
+          '<div><div class="est-hub-cust-name">'+escapeHtml(c.name)+'</div>'+
+          '<div class="est-hub-cust-sub">'+escapeHtml(c.phone||'')+(c.address?' · '+escapeHtml(c.address):'')+'</div></div>'+
+          '<button class="btn btn-primary btn-sm" data-role="new-quote" data-cid="'+c.id+'">+ 새 견적</button>'+
+        '</div>'+
+        (quotes.length ? '<div class="est-hub-quotes">'+quotes.map(q=>estHubQuoteRowHTML(q)).join('')+'</div>' : '<div class="empty-note" style="margin-top:8px;">아직 작성된 견적이 없어요.</div>')+
+      '</div>';
+    }).join('');
+    box.querySelectorAll('[data-role="new-quote"]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{ const c = customerById(btn.dataset.cid); if(c) goToEstimateForCustomer(c, null); });
+    });
+    box.querySelectorAll('[data-role="open-quote"]').forEach(el=>{
+      el.addEventListener('click', ()=>{
+        const cid = el.dataset.cid;
+        const c = cid ? customerById(cid) : null;
+        if(c) goToEstimateForCustomer(c, el.dataset.qid);
+      });
+    });
+  }
+  renderList('');
+  document.getElementById('est-hub-search').addEventListener('input', e=> renderList(e.target.value.trim()));
+}
+function estHubQuoteRowHTML(q){
+  let d = ''; try{ d = q.created_at.slice(0,10); }catch(e){}
+  return '<div class="est-hub-quote-row" data-role="open-quote" data-qid="'+q.id+'" data-cid="'+(q.customer_id||'')+'">'+
+    '<span class="est-hub-quote-name">'+escapeHtml(q.label)+'</span>'+
+    '<span class="est-hub-quote-meta">'+d+' · ₩ '+won(q.total||0)+'</span>'+
+  '</div>';
 }
 
 /* ============ Projects (kanban) ============ */
