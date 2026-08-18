@@ -182,7 +182,7 @@ table.admin-table .col-final{width:110px; text-align:right; font-weight:700;}
   border-bottom:1px solid var(--line);
   padding:14px 28px;
   display:grid;
-  grid-template-columns:repeat(4,minmax(150px,1fr));
+  grid-template-columns:repeat(4,minmax(150px,1fr)) 140px;
   gap:14px 22px;
 }
 .quotetype-switch{display:flex; border:1.3px solid var(--line-strong); border-radius:8px; overflow:hidden;}
@@ -190,6 +190,7 @@ table.admin-table .col-final{width:110px; text-align:right; font-weight:700;}
 .qt-btn:first-child{border-right:1px solid var(--line-strong);}
 .qt-btn.active{background:var(--accent); color:#fff;}
 .qt-btn.active[data-qt="direct"]{background:var(--ink);}
+.vat-fee-toggle{display:flex; align-items:center; gap:6px; font-size:11px; color:var(--ink-dim); margin-top:6px; cursor:pointer;}
 .meta-field label{
   display:block;
   font-size:10.5px;
@@ -344,6 +345,7 @@ table.items tbody tr.has-qty:hover{background:#F8F0DC;}
 .item-spec{font-size:11.5px; color:var(--ink-faint); margin-top:1px;}
 .col-unit{width:44px; color:var(--ink-dim); font-size:12.5px; text-align:center;}
 .col-price{width:96px; text-align:right; font-size:12.5px; color:var(--ink-dim);}
+.col-cost{width:88px; text-align:right; font-size:12px; color:var(--ink-dim);}
 .col-opt{width:56px; text-align:center;}
 .col-qty{width:96px;}
 .col-amt{width:112px; text-align:right; font-weight:700; font-size:13px;}
@@ -379,7 +381,7 @@ table.items tbody tr.has-qty:hover{background:#F8F0DC;}
   border-radius:var(--radius);
 }
 .custom-add-title{font-size:11.5px; font-weight:700; color:var(--ink-faint); margin-bottom:8px; text-transform:uppercase; letter-spacing:.04em;}
-.custom-add-grid{display:grid; grid-template-columns:1.6fr .9fr .8fr .9fr auto; gap:8px; align-items:center;}
+.custom-add-grid{display:grid; grid-template-columns:1.3fr 1.1fr .9fr .8fr .9fr auto; gap:8px; align-items:center;}
 .custom-add-grid input{
   padding:7px 9px;
   border:1.3px solid var(--line-strong);
@@ -627,6 +629,13 @@ table.items tbody tr.has-qty:hover{background:#F8F0DC;}
         <button class="qt-btn" data-qt="turnkey">턴키</button>
         <button class="qt-btn" data-qt="direct">직영</button>
       </div>
+      <label class="vat-fee-toggle" id="vat-fee-toggle" style="display:none;">
+        <input type="checkbox" id="vat-on-fee-check"> 수수료에 부가세 포함
+      </label>
+    </div>
+    <div class="meta-field">
+      <label>&nbsp;</label>
+      <button class="btn-primary" id="quick-save-btn" style="width:100%;">이 견적 저장</button>
     </div>
   </div>
 
@@ -918,10 +927,10 @@ function setQty(group, i, patch){
 function getCustomList(group){
   return state.custom[group] || [];
 }
-function addCustom(group, n, u, p, opt){
+function addCustom(group, n, s, u, p, opt){
   if(!n || !p) return;
   const list = getCustomList(group).slice();
-  list.push({id:"c"+(customSeq++), n:n, u:u||'식', p:Number(p)||0, q:1, opt:!!opt});
+  list.push({id:"c"+(customSeq++), n:n, s:s||'', u:u||'식', p:Number(p)||0, q:1, opt:!!opt});
   state.custom[group] = list;
   renderAll();
 }
@@ -1039,9 +1048,10 @@ function computeTotals(){
       ? directTotal * (Number(cfg.adminFeeValue)||0) / 100
       : (Number(cfg.adminFeeValue)||0);
     const subtotal = directTotal + serviceFee + adminFee;
-    const vat = subtotal * VAT;
+    const vatOnFee = state.meta.directVatOnFee !== false; // 기본값: 포함
+    const vat = vatOnFee ? serviceFee * VAT : 0;
     const grand = subtotal + vat;
-    return {basicDirect, optionDirect, directTotal, serviceFee, adminFee, indirectTotal:serviceFee+adminFee, subtotal, vat, grand, byCat, isDirect:true};
+    return {basicDirect, optionDirect, directTotal, serviceFee, adminFee, indirectTotal:serviceFee+adminFee, subtotal, vat, vatOnFee, grand, byCat, isDirect:true};
   }
 
   const indGen = directTotal * IND_GEN;
@@ -1402,6 +1412,19 @@ function bindConsultEvents(cid, view){
   });
 }
 
+function rowPriceParts(group, i){
+  // 재료비/노무비/경비를 각각 마진 반영한 값으로 분리 (직영모드는 마진 0, 목공사 직영은 노무비 제외)
+  const it = effItem(group, i);
+  if(isCarpenterDirectGroup(group)){
+    return { mat: itemMaterialRaw(group,i), labor: 0, exp: itemExpenseRaw(group,i) };
+  }
+  const isDirect = state.meta.quoteType === 'direct';
+  const m = isDirect ? 0 : ((it.mo !== undefined && it.mo !== null) ? it.mo : categoryMargin(group));
+  const mat = (it.mat !== undefined && it.mat !== null) ? roundUp(it.mat * (1+m), it.mp) : 0;
+  const labor = (it.labor !== undefined && it.labor !== null) ? roundUp(it.labor * (1+m), it.lp) : 0;
+  const exp = (it.exp !== undefined && it.exp !== null) ? roundUp(it.exp * (1+m), it.ep) : 0;
+  return { mat, labor, exp };
+}
 function rowDisplayPrice(group, i){
   // 직영공사+목공사(4)는 견적에 자재비+경비만 반영 (인건비는 품수로 별도 표시, 총액 미포함)
   if(isCarpenterDirectGroup(group)) return itemMaterialRaw(group,i) + itemExpenseRaw(group,i);
@@ -1409,7 +1432,8 @@ function rowDisplayPrice(group, i){
 }
 function itemRowHTML(group, i){
   const it = effItem(group, i);
-  const price = rowDisplayPrice(group, i);
+  const parts = rowPriceParts(group, i);
+  const price = parts.mat + parts.labor + parts.exp;
   const st = getQty(group,i);
   const amt = lineAmt(price, st.q);
   return ''+
@@ -1417,10 +1441,12 @@ function itemRowHTML(group, i){
     '<td class="col-idx num">'+(i+1)+'</td>'+
     '<td class="col-name"><div class="item-name">'+escapeHtml(it.n)+'</div>'+(it.s?'<div class="item-spec">'+escapeHtml(it.s)+'</div>':'')+'</td>'+
     '<td class="col-unit">'+escapeHtml(it.u)+'</td>'+
-    '<td class="col-price num">'+won(price)+'</td>'+
+    '<td class="col-cost num">'+(parts.mat>0?won(parts.mat):'')+'</td>'+
+    '<td class="col-cost num">'+(parts.labor>0?won(parts.labor):'')+'</td>'+
+    '<td class="col-cost num">'+(parts.exp>0?won(parts.exp):'')+'</td>'+
     '<td class="col-opt"><input type="checkbox" class="opt-check" '+(st.opt?'checked':'')+' data-role="opt" data-group="'+group+'" data-i="'+i+'" title="옵션 공사로 표시"></td>'+
     '<td class="col-qty"><input type="number" min="0" step="1" class="qty-input num" value="'+(st.q||'')+'" placeholder="0" data-role="qty" data-group="'+group+'" data-i="'+i+'" onfocus="this.select()"></td>'+
-    '<td class="col-amt num"><span class="amt-text">'+(st.q>0? won(amt) : '')+'</span></td>'+
+    '<td class="col-amt num"><span class="amt-text">'+(st.q>0? won(amt) : '')+'</span> <button class="btn-remove" data-role="item-del" data-group="'+group+'" data-i="'+i+'" title="이 견적에서 삭제">×</button></td>'+
   '</tr>';
 }
 function customRowHTML(group, it){
@@ -1428,9 +1454,11 @@ function customRowHTML(group, it){
   return ''+
   '<tr class="custom-row '+(it.q>0?'has-qty':'')+'">'+
     '<td class="col-idx num">＋</td>'+
-    '<td class="col-name"><div class="item-name">'+escapeHtml(it.n)+' <span style="color:var(--accent);font-size:10.5px;font-weight:700;">직접입력</span></div></td>'+
+    '<td class="col-name"><div class="item-name">'+escapeHtml(it.n)+' <span style="color:var(--accent);font-size:10.5px;font-weight:700;">직접입력</span></div>'+(it.s?'<div class="item-spec">'+escapeHtml(it.s)+'</div>':'')+'</td>'+
     '<td class="col-unit">'+escapeHtml(it.u)+'</td>'+
-    '<td class="col-price num">'+won(it.p)+'</td>'+
+    '<td class="col-cost num">'+won(it.p)+'</td>'+
+    '<td class="col-cost num"></td>'+
+    '<td class="col-cost num"></td>'+
     '<td class="col-opt"><input type="checkbox" class="opt-check" '+(it.opt?'checked':'')+' data-role="c-opt" data-group="'+group+'" data-id="'+it.id+'"></td>'+
     '<td class="col-qty"><input type="number" min="0" step="1" class="qty-input num" value="'+(it.q||'')+'" data-role="c-qty" data-group="'+group+'" data-id="'+it.id+'" onfocus="this.select()"></td>'+
     '<td class="col-amt num"><span class="amt-text">'+(it.q>0? won(amt):'')+'</span> <button class="btn-remove" data-role="c-del" data-group="'+group+'" data-id="'+it.id+'" title="삭제">×</button></td>'+
@@ -1500,7 +1528,7 @@ function quoteTableHTML(group){
     '<table class="items">'+
       '<thead><tr>'+
         '<th class="col-idx">No</th><th class="col-name">품명 / 규격</th><th class="col-unit">단위</th>'+
-        '<th class="col-price">단가</th><th class="col-opt">옵션</th><th class="col-qty">수량</th><th class="col-amt">금액</th>'+
+        '<th class="col-cost">재료비</th><th class="col-cost">노무비</th><th class="col-cost">경비</th><th class="col-opt">옵션</th><th class="col-qty">수량</th><th class="col-amt">금액</th>'+
       '</tr></thead>'+
       '<tbody>'+rows+'</tbody>'+
     '</table>'+
@@ -1513,6 +1541,7 @@ function quoteTableHTML(group){
     '<div class="custom-add-title">목록에 없는 항목 직접 추가</div>'+
     '<div class="custom-add-grid">'+
       '<input type="text" placeholder="품명" data-role="new-n" data-group="'+group+'">'+
+      '<input type="text" placeholder="규격 (선택)" data-role="new-s" data-group="'+group+'">'+
       '<input type="text" placeholder="단위 (예: EA, m, 식)" data-role="new-u" data-group="'+group+'">'+
       '<input type="number" placeholder="단가" data-role="new-p" data-group="'+group+'">'+
       '<label style="font-size:12px;color:var(--ink-dim);display:flex;align-items:center;gap:5px;"><input type="checkbox" class="opt-check" data-role="new-opt" data-group="'+group+'"> 옵션</label>'+
@@ -1667,16 +1696,25 @@ function bindMainEvents(){
     $main.querySelectorAll('[data-role="c-del"]').forEach(el=>{
       el.addEventListener('click', e=>{ removeCustom(e.target.dataset.group, e.target.dataset.id); });
     });
+    $main.querySelectorAll('[data-role="item-del"]').forEach(el=>{
+      el.addEventListener('click', e=>{
+        const group = e.target.dataset.group, i = parseInt(e.target.dataset.i,10);
+        toggleItemSelected(group, i); // 체크 해제 + 수량 초기화
+        saveDraft();
+        renderMain();
+      });
+    });
     $main.querySelectorAll('[data-role="new-add"]').forEach(el=>{
       el.addEventListener('click', e=>{
         const group = e.target.dataset.group;
         const root = e.target.closest('.custom-add-grid');
         const n = root.querySelector('[data-role="new-n"]').value.trim();
+        const s = root.querySelector('[data-role="new-s"]').value.trim();
         const u = root.querySelector('[data-role="new-u"]').value.trim();
         const p = root.querySelector('[data-role="new-p"]').value;
         const opt = root.querySelector('[data-role="new-opt"]').checked;
         if(!n || !p){ alert('품명과 단가를 입력해 주세요.'); return; }
-        addCustom(group, n, u, p, opt);
+        addCustom(group, n, s, u, p, opt);
       });
     });
     const winPos = document.getElementById('win-position');
@@ -1927,7 +1965,7 @@ function summaryHTML(){
     html += '<li class="strong">B. 간접공사비 소계<span class="amt">'+won(t.indirectTotal)+'</span></li>';
   }
   html += '<li class="strong">소계 (A+B)<span class="amt">'+won(t.subtotal)+'</span></li>';
-  html += '<li>부가가치세 (10%)<span class="amt">'+won(t.vat)+'</span></li>';
+  html += '<li>'+(t.isDirect ? '부가가치세'+(t.vatOnFee?' (수수료 10%)':' (미포함)') : '부가가치세 (10%)')+'<span class="amt">'+won(t.vat)+'</span></li>';
   html += '</ul>';
   html += '<div class="total-card"><div class="label">총 공사 견적 금액</div><div class="value">₩ '+won(t.grand)+'</div><div class="vat-note">부가가치세 포함 금액입니다</div></div>';
   html += '<div class="by-cat"><div class="by-cat-title">공종별 내역</div>';
@@ -1996,11 +2034,35 @@ function bindMeta(){
       if(state.mode==='quote' && state.phase==='build') renderMain();
     });
   });
+  document.getElementById('vat-on-fee-check').addEventListener('change', e=>{
+    state.meta.directVatOnFee = e.target.checked;
+    saveDraft();
+    renderNav(); renderSummary();
+  });
+  document.getElementById('quick-save-btn').addEventListener('click', async ()=>{
+    const btn = document.getElementById('quick-save-btn');
+    const label = state.meta.customer || state.meta.project || '(이름 없음)';
+    if(!state.meta.customer && !state.meta.project){
+      alert('저장하기 전에 고객명 또는 프로젝트명을 입력해 주세요.');
+      return;
+    }
+    btn.disabled = true; btn.textContent = '저장 중…';
+    const ok = await saveCurrentAsSnapshot(label, false);
+    btn.disabled = false;
+    btn.textContent = ok ? '저장됨 ✓' : '저장 실패';
+    setTimeout(()=>{ if(document.body.contains(btn)) btn.textContent = '이 견적 저장'; }, 1500);
+  });
 }
 function updateQuoteTypeSwitch(){
   document.querySelectorAll('[data-qt]').forEach(btn=>{
     btn.classList.toggle('active', btn.dataset.qt === (state.meta.quoteType||'turnkey'));
   });
+  const toggle = document.getElementById('vat-fee-toggle');
+  const check = document.getElementById('vat-on-fee-check');
+  if(toggle && check){
+    toggle.style.display = (state.meta.quoteType==='direct') ? 'flex' : 'none';
+    check.checked = state.meta.directVatOnFee !== false; // 기본값: 포함
+  }
 }
 let CURRENT_ROLE = null;
 let EMBED_ADMIN_MODE = false; // index.html "설정" 탭에서 iframe으로 열렸을 때 true
@@ -2076,7 +2138,7 @@ function buildPrintView(){
       '<tr><td>'+(t.isDirect?'A. 실행원가 소계 (마진 0%)':'A. 직접공사비 소계')+'</td><td class="p-right">'+won(t.directTotal)+' 원</td></tr>'+
       '<tr><td>'+(t.isDirect?'B. 수수료+공정관리비 소계':'B. 간접공사비 소계 (관리비+잡비)')+'</td><td class="p-right">'+won(t.indirectTotal)+' 원</td></tr>'+
       '<tr><td>소계</td><td class="p-right">'+won(t.subtotal)+' 원</td></tr>'+
-      '<tr><td>부가가치세 (10%)</td><td class="p-right">'+won(t.vat)+' 원</td></tr>'+
+      '<tr><td>'+(t.isDirect ? '부가가치세'+(t.vatOnFee?' (수수료 10%)':' (미포함)') : '부가가치세 (10%)')+'</td><td class="p-right">'+won(t.vat)+' 원</td></tr>'+
       '<tr class="final"><td>총 계</td><td class="p-right">'+won(t.grand)+' 원</td></tr>'+
     '</tbody></table>'+
     '<div class="p-note">'+
