@@ -120,11 +120,19 @@ table.admin-table .col-margin{width:96px; text-align:right;}
 table.admin-table .col-subcat{width:110px;}
 table.admin-table .col-subcat select{width:100%; padding:5px 4px; font-size:11.5px; border:1px solid var(--line-strong); border-radius:6px;}
 table.admin-table .col-reorder{width:150px;}
-.reorder-btns{display:flex; gap:4px; margin-bottom:4px;}
+table.admin-table .col-drag{width:56px; text-align:center;}
+.drag-handle{cursor:grab; font-size:15px; color:var(--ink-faint); margin-right:6px; user-select:none;}
+.drag-handle.disabled{cursor:not-allowed; opacity:.25;}
+tr[draggable="true"]{cursor:default;}
+tr.dragging{opacity:.4;}
+tr.drag-over{outline:2px dashed var(--accent); outline-offset:-2px;}
+.move-check{vertical-align:middle;}
+.move-bar{display:flex; align-items:center; gap:10px; margin:14px 0; flex-wrap:wrap;}
+.move-bar-hint{flex:1; min-width:220px; font-size:11.5px; color:var(--ink-faint);}
+.move-target-select{padding:8px 10px; border:1.3px solid var(--line-strong); border-radius:8px; font-size:12.5px;}
 .btn-reorder{flex:1; padding:4px 0; font-size:11px; border:1px solid var(--line-strong); border-radius:5px; background:var(--surface); color:var(--ink-dim);}
 .btn-reorder:disabled{opacity:.3;}
 .btn-reorder:not(:disabled):hover{background:var(--accent-soft); border-color:var(--accent);}
-.move-select{width:100%; padding:4px 3px; font-size:10.5px; border:1px solid var(--line-strong); border-radius:5px;}
 table.admin-table .col-final{width:110px; text-align:right; font-weight:700;}
 .cost-input{
   width:88px; padding:5px 7px; border:1.3px solid var(--line-strong); border-radius:6px;
@@ -225,6 +233,7 @@ table.admin-table .col-final{width:110px; text-align:right; font-weight:700;}
   gap:0;
   align-items:start;
 }
+body.embed-admin .layout{grid-template-columns:236px 1fr;}
 
 /* ===== Left nav ===== */
 .nav{
@@ -305,6 +314,12 @@ table.admin-table .col-final{width:110px; text-align:right; font-weight:700;}
   font-weight:800;
   letter-spacing:-.01em;
 }
+.cat-title-edit{
+  font-size:23px; margin:2px 0 0; font-weight:800; letter-spacing:-.01em;
+  border:none; border-bottom:2px dashed var(--line-strong); background:transparent;
+  padding:2px 0; width:100%; max-width:420px; color:var(--ink);
+}
+.cat-title-edit:focus{outline:none; border-bottom-color:var(--accent);}
 .subgroup-title{
   font-size:13px;
   font-weight:700;
@@ -663,7 +678,7 @@ table.items tbody tr.has-qty:hover{background:#F8F0DC;}
 /* ============ Data ============ */
 let CATALOG = {};   // 서버(Supabase catalog_groups)에서 불러와서 채움 - 로그인 안 하면 내용 안 보임
 
-const CAT_ORDER = ["1","2","3","4","5","6","7","8","9","10","11","12","13"];
+const CAT_ORDER = ["1","2","3","4","5","6","7","8","9","10","11","12","13","14"];
 const CAT_META = {
   "1":   {no:"1",  title:"가설공사"},
   "2":   {no:"2",  title:"철거 및 설비"},
@@ -676,14 +691,15 @@ const CAT_META = {
   "9":   {no:"9",  title:"도배"},
   "10":  {no:"10", title:"바닥재"},
   "11":  {no:"11", title:"전기 및 조명"},
-  "12":  {no:"12", title:"가구류 및 기타 마감작업"},
-  "13":  {no:"13", title:"기타"},
+  "12":  {no:"12", title:"가구류"},
+  "13":  {no:"13", title:"기타 마감작업"},
+  "14":  {no:"14", title:"기타"},
 };
 const CAT_GROUPS = {
   "1":["1"], "2":["2"], "3":["3"], "4":["4"], "5":["5"],
   "6":["6a","6b"],
   "7":["7"], "8":["8"], "9":["9"], "10":["10"],
-  "11":["11"], "12":["12"], "13":["13"],
+  "11":["11"], "12":["12"], "13":["14"], "14":["13"],
 };
 
 const IND_GEN = 0.025;   // 일반관리비
@@ -708,8 +724,9 @@ const state = {
   customerName: null,   // 연결된 고객 이름 (화면 표시용)
   currentQuoteId: null, // 서버에 저장된 이 견적의 id (다시 저장하면 새로 만들지 않고 이 항목을 덮어씀)
   savedQuotesCache: null, // "저장된 견적" 목록 서버 조회 캐시
-  quoteConfig: { feePercent:15, adminFeeMode:'fixed', adminFeeValue:1000000, carpenterDayWage:350000 }, // 직영공사 수수료 및 목수 일당 기본값 (서버에서 불러옴)
+  quoteConfig: { feePercent:15, adminFeeMode:'fixed', adminFeeValue:1000000, carpenterDayWage:350000, vatOnFeeDefault:true }, // 직영공사 수수료 및 목수 일당 기본값 (서버에서 불러옴)
   windowPositions: [], // 창호 위치 목록 (서버에서 불러옴)
+  adminMoveSelected: {}, // 설정 화면: 다른 공종으로 이동시킬 항목 체크 상태 (key `${group}|${i}` -> true)
   carpenterDaysOverride: {}, // 목공사 품수 수동 조정값 (group -> number|null)
 };
 let customSeq = 1;
@@ -839,7 +856,12 @@ async function loadCatalogFromServer(){
     built[row.group_id] = { label: row.label, margin: row.margin, items: row.items };
   });
   CATALOG = built;
+  const { data: titleRows } = await sb.from('category_titles').select('*');
+  (titleRows||[]).forEach(r=>{ if(CAT_META[r.cid]) CAT_META[r.cid].title = r.title; });
   return true;
+}
+function saveCategoryTitleToServer(cid, title){
+  return sb.from('category_titles').upsert({ cid, title }).then(({error})=>{ if(error) console.error('카테고리 이름 저장 실패', error); });
 }
 async function loadLivePricing(){
   const [ovRes, mgRes, cfgRes, wpRes] = await Promise.all([
@@ -871,6 +893,7 @@ async function loadLivePricing(){
       adminFeeMode: cfgRes.data.direct_admin_fee_mode,
       adminFeeValue: cfgRes.data.direct_admin_fee_value,
       carpenterDayWage: cfgRes.data.carpenter_day_wage || 350000,
+      vatOnFeeDefault: cfgRes.data.direct_vat_on_fee_default !== false,
     };
   }
   state.windowPositions = wpRes.data || [];
@@ -894,6 +917,7 @@ function saveQuoteConfigToServer(){
     direct_admin_fee_mode: cfg.adminFeeMode,
     direct_admin_fee_value: Number(cfg.adminFeeValue)||0,
     carpenter_day_wage: Number(cfg.carpenterDayWage)||350000,
+    direct_vat_on_fee_default: !!cfg.vatOnFeeDefault,
   }).then(({error})=>{ if(error) console.error('직영 수수료 설정 저장 실패', error); });
 }
 
@@ -1054,7 +1078,7 @@ function computeTotals(){
       ? directTotal * (Number(cfg.adminFeeValue)||0) / 100
       : (Number(cfg.adminFeeValue)||0);
     const subtotal = directTotal + serviceFee + adminFee;
-    const vatOnFee = state.meta.directVatOnFee !== false; // 기본값: 포함
+    const vatOnFee = (state.meta.directVatOnFee !== undefined) ? state.meta.directVatOnFee : (state.quoteConfig.vatOnFeeDefault !== false);
     const vat = vatOnFee ? serviceFee * VAT : 0;
     const grand = subtotal + vat;
     return {basicDirect, optionDirect, directTotal, serviceFee, adminFee, indirectTotal:serviceFee+adminFee, subtotal, vat, vatOnFee, grand, byCat, isDirect:true};
@@ -1230,6 +1254,10 @@ function renderDirectFeeConfig(){
       '<label>목수 일당 (품수 환산 기준, 원)</label>'+
       '<input type="number" id="cfg-carpenter-wage" step="10000" value="'+(cfg.carpenterDayWage)+'">'+
     '</div>'+
+    '<div class="field">'+
+      '<label>수수료 부가세 기본값</label>'+
+      '<label class="config-radio-row" style="padding-top:2px;"><input type="checkbox" id="cfg-vat-default" '+(cfg.vatOnFeeDefault?'checked':'')+'> 새 직영 견적 시작 시 "수수료에 부가세 포함"을 기본으로 켜기</label>'+
+    '</div>'+
     '<button class="btn-primary" id="cfg-save-btn" style="flex:none;padding:12px 22px;">저장</button>'+
   '</div>';
   $main.innerHTML = body;
@@ -1240,6 +1268,7 @@ function renderDirectFeeConfig(){
       adminFeeMode: document.querySelector('input[name="cfg-admin-mode"]:checked').value,
       adminFeeValue: Number(document.getElementById('cfg-admin-value').value)||0,
       carpenterDayWage: Number(document.getElementById('cfg-carpenter-wage').value)||350000,
+      vatOnFeeDefault: document.getElementById('cfg-vat-default').checked,
     };
     btn.disabled = true; btn.textContent = '저장 중…';
     await saveQuoteConfigToServer();
@@ -1578,18 +1607,14 @@ function adminRowHTML(group, i){
     SUBCAT_ORDER.map(sc=>'<option value="'+sc+'" '+(it.subcat===sc?'selected':'')+'>'+sc+'</option>').join('')+
     '</select></td>' : '';
   const isGroup2 = group==="2";
-  const moveOpts = allGroupOptions().filter(o=>o.group!==group).map(o=>'<option value="'+o.group+'">'+o.label+'</option>').join('');
-  const reorderCell = '<td class="col-reorder">'+
-    '<div class="reorder-btns">'+
-      '<button class="btn-reorder" data-role="item-up" data-group="'+group+'" data-i="'+i+'" '+(i===0||isGroup2?'disabled':'')+' title="'+(isGroup2?'소분류로 자동 정렬돼요':'위로 이동')+'">▲</button>'+
-      '<button class="btn-reorder" data-role="item-down" data-group="'+group+'" data-i="'+i+'" '+(i===59||isGroup2?'disabled':'')+' title="'+(isGroup2?'소분류로 자동 정렬돼요':'아래로 이동')+'">▼</button>'+
-    '</div>'+
-    '<select class="move-select" data-role="item-move" data-group="'+group+'" data-i="'+i+'">'+
-      '<option value="">다른 공종으로 이동…</option>'+moveOpts+
-    '</select>'+
+  const checked = !!state.adminMoveSelected[group+"|"+i];
+  const dragCell = '<td class="col-drag">'+
+    (isGroup2 ? '<span class="drag-handle disabled" title="소분류로 자동 정렬돼요">⋮⋮</span>' : '<span class="drag-handle" title="드래그해서 순서 변경">⋮⋮</span>')+
+    '<input type="checkbox" class="move-check" data-role="move-check" data-group="'+group+'" data-i="'+i+'" '+(checked?'checked':'')+' title="이동할 항목으로 선택">'+
   '</td>';
   return ''+
-  '<tr>'+
+  '<tr draggable="'+(isGroup2?'false':'true')+'" data-group="'+group+'" data-i="'+i+'">'+
+    dragCell+
     '<td class="col-idx num">'+(i+1)+'</td>'+
     '<td class="col-name">'+
       '<input type="text" class="name-input" value="'+escapeHtml(it.n)+'" placeholder="품명 입력" data-role="name-edit" data-group="'+group+'" data-i="'+i+'">'+
@@ -1602,7 +1627,6 @@ function adminRowHTML(group, i){
     '<td class="col-cost">'+costCellHTML(group,i,'exp',it.exp,'경비')+'</td>'+
     '<td class="col-margin"><input type="number" class="cost-input num margin-input" step="0.1" value="'+(it.mo!==undefined&&it.mo!==null? pct(it.mo):'')+'" placeholder="기본" data-role="item-margin" data-group="'+group+'" data-i="'+i+'" onfocus="this.select()"> %</td>'+
     '<td class="col-final num"><span class="final-price">'+(price>0? won(price):'')+'</span></td>'+
-    reorderCell+
   '</tr>';
 }
 /* ============ 항목 순서 변경 / 카테고리 이동 ============ */
@@ -1629,26 +1653,63 @@ async function saveGroupFullToServer(group){
   for(let i=0;i<60;i++){ if(state.priceOverride[group+"|"+i]) rows.push(priceOverrideToDbRow(group,i)); }
   if(rows.length) await sb.from('price_overrides').upsert(rows);
 }
-async function reorderItem(group, i, direction){
-  const j = i + direction;
-  if(j<0 || j>59) return;
+async function moveCheckedItemsForCurrentView(toGroup){
+  const groups = CAT_GROUPS[state.active] || [state.active];
+  for(const g of groups){
+    if(g === toGroup) continue;
+    const hasChecked = Object.keys(state.adminMoveSelected).some(k=>k.startsWith(g+"|") && state.adminMoveSelected[k]);
+    if(hasChecked) await moveCheckedItemsToCategory(g, toGroup);
+  }
+}
+function bindDragReorder(){
+  let dragSrc = null;
+  $main.querySelectorAll('tr[draggable="true"]').forEach(tr=>{
+    tr.addEventListener('dragstart', ()=>{
+      dragSrc = { group: tr.dataset.group, i: parseInt(tr.dataset.i,10) };
+      tr.classList.add('dragging');
+    });
+    tr.addEventListener('dragend', ()=>{ tr.classList.remove('dragging'); });
+    tr.addEventListener('dragover', e=>{ e.preventDefault(); tr.classList.add('drag-over'); });
+    tr.addEventListener('dragleave', ()=>{ tr.classList.remove('drag-over'); });
+    tr.addEventListener('drop', async e=>{
+      e.preventDefault();
+      tr.classList.remove('drag-over');
+      if(!dragSrc) return;
+      const targetGroup = tr.dataset.group, targetI = parseInt(tr.dataset.i,10);
+      if(dragSrc.group !== targetGroup || dragSrc.i === targetI){ dragSrc = null; return; }
+      await moveWithinGroup(targetGroup, dragSrc.i, targetI);
+      dragSrc = null;
+    });
+  });
+}
+async function moveWithinGroup(group, fromIndex, toIndex){
+  if(fromIndex===toIndex) return;
   const pairs = getGroupPairs(group);
-  const tmp = pairs[i]; pairs[i] = pairs[j]; pairs[j] = tmp;
+  const moved = pairs.splice(fromIndex,1)[0];
+  pairs.splice(toIndex,0,moved);
   setGroupPairs(group, pairs);
   await saveGroupFullToServer(group);
-  renderMain();
+  renderMain(); // 같은 카테고리 화면 그대로 유지
 }
-async function moveItemToCategory(fromGroup, i, toGroup){
-  let fromPairs = getGroupPairs(fromGroup);
-  const moved = fromPairs.splice(i, 1)[0];
-  setGroupPairs(fromGroup, fromPairs);
+async function moveCheckedItemsToCategory(fromGroup, toGroup){
+  const pairs = getGroupPairs(fromGroup);
+  const selectedIdxs = [];
+  pairs.forEach((p,i)=>{ if(state.adminMoveSelected[fromGroup+"|"+i] && p.item.n) selectedIdxs.push(i); });
+  if(selectedIdxs.length===0){ alert('이동할 항목을 먼저 체크해 주세요.'); return; }
   let toPairs = trimTrailingBlanks(getGroupPairs(toGroup));
-  if(toPairs.length >= 60){ alert('"'+CATALOG[toGroup].label+'" 공종이 이미 60칸 가득 찼어요. 이동할 수 없어요.'); return; }
-  toPairs.push(moved);
+  if(toPairs.length + selectedIdxs.length > 60){
+    alert('"'+CATALOG[toGroup].label+'" 공종에 자리가 부족해요. (남은 자리 '+(60-toPairs.length)+'칸, 이동하려는 항목 '+selectedIdxs.length+'개)');
+    return;
+  }
+  if(!confirm(selectedIdxs.length+'개 항목을 "'+CATALOG[toGroup].label+'"(으)로 이동할까요?')) return;
+  const movedItems = selectedIdxs.map(i=>pairs[i]);
+  const remaining = pairs.filter((p,i)=>!selectedIdxs.includes(i));
+  setGroupPairs(fromGroup, remaining);
+  toPairs = toPairs.concat(movedItems);
   setGroupPairs(toGroup, toPairs);
+  selectedIdxs.forEach(i=>{ delete state.adminMoveSelected[fromGroup+"|"+i]; });
   await Promise.all([saveGroupFullToServer(fromGroup), saveGroupFullToServer(toGroup)]);
-  state.active = cidForGroup(toGroup);
-  renderMain();
+  renderMain(); // 이동 후에도 지금 보던 공종 화면 그대로 유지
 }
 function cidForGroup(group){
   for(const cid of CAT_ORDER){ if(CAT_GROUPS[cid].includes(group)) return cid; }
@@ -1674,6 +1735,7 @@ function adminTableHTML(group){
   const rows = orderedItemIndices(group).map(i=>adminRowHTML(group,i)).join('');
   const margin = categoryMargin(group);
   const subcatHead = group==="2" ? '<th class="col-subcat">소분류</th>' : '';
+  const moveOpts = allGroupOptions().filter(o=>o.group!==group).map(o=>'<option value="'+o.group+'">'+o.label+'</option>').join('');
   return ''+
   (group==="3" ? windowPositionsAdminHTML() : '')+
   '<div class="margin-box" id="marginbox-'+group+'">'+
@@ -1684,13 +1746,18 @@ function adminTableHTML(group){
       '<button class="btn-primary btn-reset-group" id="save-group-btn-'+group+'" data-role="save-group" data-group="'+group+'">저장</button>'+
     '</div>'+
   '</div>'+
+  '<div class="move-bar">'+
+    '<span class="move-bar-hint">왼쪽 ⋮⋮ 를 드래그하면 순서가 바뀌고, 체크박스로 여러 항목을 골라 다른 공종으로 옮길 수 있어요.</span>'+
+    '<select id="move-target-select" class="move-target-select"><option value="">이동할 공종 선택…</option>'+moveOpts+'</select>'+
+    '<button class="btn-secondary" id="move-selected-btn" style="flex:none;padding:8px 14px;">선택 항목 이동</button>'+
+  '</div>'+
   '<table class="items admin-table">'+
     '<thead><tr>'+
-      '<th class="col-idx">No</th><th class="col-name">품명 / 규격</th>'+subcatHead+'<th class="col-unit">단위</th>'+
+      '<th class="col-drag"></th><th class="col-idx">No</th><th class="col-name">품명 / 규격</th>'+subcatHead+'<th class="col-unit">단위</th>'+
       '<th class="col-cost">재료비</th><th class="col-cost">노무비</th><th class="col-cost">경비</th>'+
-      '<th class="col-margin">개별 마진율</th><th class="col-final">최종 단가</th><th class="col-reorder">순서 / 이동</th>'+
+      '<th class="col-margin">개별 마진율</th><th class="col-final">최종 단가</th>'+
     '</tr></thead>'+
-    '<tbody>'+rows+'</tbody>'+
+    '<tbody id="admin-tbody-'+group+'">'+rows+'</tbody>'+
   '</table>';
 }
 
@@ -1712,7 +1779,10 @@ function renderMain(){
   }
   const cid = state.active;
   const meta = CAT_META[cid];
-  let body = '<div class="cat-head"><div class="eyebrow">CATEGORY '+meta.no+' · '+(state.mode==='admin'?'설정':'견적 작성')+'</div><h2>'+meta.title+'</h2>'+
+  const titleHTML = state.mode==='admin'
+    ? '<input type="text" class="cat-title-edit" id="cat-title-input" data-cid="'+cid+'" value="'+escapeHtml(meta.title)+'">'
+    : '<h2>'+escapeHtml(meta.title)+'</h2>';
+  let body = '<div class="cat-head"><div class="eyebrow">CATEGORY '+meta.no+' · '+(state.mode==='admin'?'설정':'견적 작성')+'</div>'+titleHTML+
     (state.mode==='quote' ? '<button class="btn-secondary" style="flex:none;padding:8px 14px;" data-role="back-to-select">+ 항목 추가하기</button>' : '')+
     '</div>';
 
@@ -1735,6 +1805,21 @@ function bindMainEvents(){
     if(state.flow === 'consult') state.selectIdx = 0;
     saveDraft(); renderAll(); window.scrollTo(0,0);
   });
+  const titleInput = document.getElementById('cat-title-input');
+  if(titleInput){
+    let saveTimer = null;
+    const doSave = ()=>{
+      const cid = titleInput.dataset.cid;
+      const title = titleInput.value.trim();
+      if(!title) return;
+      CAT_META[cid].title = title;
+      saveCategoryTitleToServer(cid, title);
+      renderNav();
+    };
+    titleInput.addEventListener('input', ()=>{ clearTimeout(saveTimer); saveTimer = setTimeout(doSave, 600); });
+    titleInput.addEventListener('blur', doSave);
+    titleInput.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); titleInput.blur(); } });
+  }
   if(state.mode === 'quote'){
     $main.querySelectorAll('[data-role="qty"]').forEach(el=>{
       el.addEventListener('input', e=>{
@@ -1871,30 +1956,24 @@ function bindMainEvents(){
         renderMain(); // 정렬 순서가 바뀌므로 다시 그림
       });
     });
-    $main.querySelectorAll('[data-role="item-up"]').forEach(el=>{
-      el.addEventListener('click', async e=>{
-        const btn = e.target; btn.disabled = true;
-        await reorderItem(btn.dataset.group, parseInt(btn.dataset.i,10), -1);
+    $main.querySelectorAll('[data-role="move-check"]').forEach(el=>{
+      el.addEventListener('change', e=>{
+        const k = e.target.dataset.group+"|"+e.target.dataset.i;
+        if(e.target.checked) state.adminMoveSelected[k] = true; else delete state.adminMoveSelected[k];
       });
     });
-    $main.querySelectorAll('[data-role="item-down"]').forEach(el=>{
-      el.addEventListener('click', async e=>{
-        const btn = e.target; btn.disabled = true;
-        await reorderItem(btn.dataset.group, parseInt(btn.dataset.i,10), 1);
+    const moveBtn = document.getElementById('move-selected-btn');
+    if(moveBtn){
+      moveBtn.addEventListener('click', async ()=>{
+        const toGroup = document.getElementById('move-target-select').value;
+        if(!toGroup){ alert('이동할 공종을 먼저 선택해 주세요.'); return; }
+        const fromGroup = state.active === "6" ? null : state.active; // 6은 6a/6b로 아래에서 처리
+        moveBtn.disabled = true;
+        await moveCheckedItemsForCurrentView(toGroup);
+        moveBtn.disabled = false;
       });
-    });
-    $main.querySelectorAll('[data-role="item-move"]').forEach(el=>{
-      el.addEventListener('change', async e=>{
-        const toGroup = e.target.value;
-        if(!toGroup) return;
-        const group = e.target.dataset.group, i = parseInt(e.target.dataset.i,10);
-        const it = effItem(group, i);
-        if(!it.n){ e.target.value=''; return; } // 빈 칸은 이동할 필요 없음
-        if(!confirm('"'+it.n+'" 항목을 "'+CATALOG[toGroup].label+'"(으)로 이동할까요?')){ e.target.value=''; return; }
-        e.target.disabled = true;
-        await moveItemToCategory(group, i, toGroup);
-      });
-    });
+    }
+    bindDragReorder();
     $main.querySelectorAll('[data-role="cost"]').forEach(el=>{
       el.addEventListener('input', e=>{
         const group = e.target.dataset.group, i = parseInt(e.target.dataset.i,10), field = e.target.dataset.field;
@@ -2162,7 +2241,7 @@ function updateQuoteTypeSwitch(){
   const check = document.getElementById('vat-on-fee-check');
   if(toggle && check){
     toggle.style.display = (state.meta.quoteType==='direct') ? 'flex' : 'none';
-    check.checked = state.meta.directVatOnFee !== false; // 기본값: 포함
+    check.checked = (state.meta.directVatOnFee !== undefined) ? state.meta.directVatOnFee : (state.quoteConfig.vatOnFeeDefault !== false);
   }
 }
 let CURRENT_ROLE = null;
@@ -2268,6 +2347,11 @@ function buildPrintView(){
   if(EMBED_ADMIN_MODE){
     const topbar = document.getElementById('app-topbar');
     if(topbar) topbar.style.display = 'none';
+    const metaBar = document.querySelector('.meta-bar');
+    if(metaBar) metaBar.style.display = 'none';
+    const summary = document.getElementById('summary-content');
+    if(summary) summary.style.display = 'none';
+    document.body.classList.add('embed-admin');
   }
 
   $main.innerHTML = '<div class="loading-note">불러오는 중…</div>';
