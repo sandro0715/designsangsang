@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
 <style>
 :root{
   --bg:#F4F1E8;
@@ -269,6 +270,13 @@ table.list tbody tr:hover{background:var(--surface-2);}
 .field textarea{resize:vertical; min-height:56px;}
 .field-row{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
 .phone-input-row{display:flex; align-items:center; gap:6px;}
+.addr-search-row{display:flex; gap:6px;}
+.addr-search-row input{flex:1;}
+.addr-result-row{display:flex; align-items:center; gap:8px; margin-top:6px;}
+.addr-result-row.hidden{display:none;}
+.addr-radio{display:flex; align-items:center; gap:4px; font-size:12px; font-weight:700; color:var(--ink-dim); flex:none; white-space:nowrap;}
+.addr-result-row input[type="text"]{flex:1; background:var(--surface-2);}
+.addr-final-preview{margin-top:6px; font-size:12px; font-weight:700; color:var(--accent-deep); min-height:16px;}
 .phone-prefix{font-size:13.5px; font-weight:700; color:var(--ink); background:var(--surface-2); border:1.3px solid var(--line-strong); border-radius:8px; padding:9px 10px;}
 .phone-dash{color:var(--ink-faint); font-weight:700;}
 .phone-part{width:100%; min-width:0; text-align:center; letter-spacing:.05em;}
@@ -595,12 +603,16 @@ function generateProjectName(address){
 function customerToDb(c){
   return { id:c.id, name:c.name, phone:c.phone||null, address:c.address||null, source:c.source||null,
     status:c.status, memo:c.memo||null, email:c.email||null, site_password:c.sitePassword||null,
-    entrance_password:c.entrancePassword||null, created_at:c.createdAt||new Date().toISOString() };
+    entrance_password:c.entrancePassword||null, created_at:c.createdAt||new Date().toISOString(),
+    road_address:c.roadAddress||null, jibun_address:c.jibunAddress||null, zonecode:c.zonecode||null,
+    address_detail:c.addressDetail||null, address_type:c.addressType||'road' };
 }
 function customerFromDb(r){
   return { id:r.id, name:r.name, phone:r.phone||'', address:r.address||'', source:r.source||'',
     status:r.status, memo:r.memo||'', email:r.email||'', sitePassword:r.site_password||'',
-    entrancePassword:r.entrance_password||'', createdAt:r.created_at };
+    entrancePassword:r.entrance_password||'', createdAt:r.created_at,
+    roadAddress:r.road_address||'', jibunAddress:r.jibun_address||'', zonecode:r.zonecode||'',
+    addressDetail:r.address_detail||'', addressType:r.address_type||'road' };
 }
 function eventToDb(e){
   return { id:e.id, title:e.title, type:e.type, customer_id:e.customerId||null, date:e.date,
@@ -1198,7 +1210,22 @@ function openCustomerModal(id){
           '</div>'+
           '<div class="field"><label>상태</label><select id="f-status">'+statusOptions+'</select></div>'+
         '</div>'+
-        '<div class="field"><label>현장주소 <span class="req">*필수</span></label><input type="text" id="f-address" value="'+escapeHtml(c?c.address||'':'')+'" placeholder="예: 서울 강동구 암사동 613-2 롯데캐슬 105동 1203호"></div>'+
+        '<div class="field"><label>현장주소 <span class="req">*필수</span></label>'+
+          '<div class="addr-search-row">'+
+            '<input type="text" id="f-zonecode" value="'+escapeHtml(c?c.zonecode||'':'')+'" placeholder="우편번호" readonly>'+
+            '<button type="button" class="btn btn-ghost btn-sm" id="btn-addr-search">주소 검색</button>'+
+          '</div>'+
+          '<div class="addr-result-row '+(c&&c.roadAddress?'':'hidden')+'" id="addr-road-row">'+
+            '<label class="addr-radio"><input type="radio" name="f-address-type" value="road" '+((!c||c.addressType!=='jibun')?'checked':'')+'> 도로명</label>'+
+            '<input type="text" id="f-road-address" value="'+escapeHtml(c?c.roadAddress||'':'')+'" readonly>'+
+          '</div>'+
+          '<div class="addr-result-row '+(c&&c.jibunAddress?'':'hidden')+'" id="addr-jibun-row">'+
+            '<label class="addr-radio"><input type="radio" name="f-address-type" value="jibun" '+(c&&c.addressType==='jibun'?'checked':'')+'> 지번</label>'+
+            '<input type="text" id="f-jibun-address" value="'+escapeHtml(c?c.jibunAddress||'':'')+'" readonly>'+
+          '</div>'+
+          '<input type="text" id="f-address-detail" value="'+escapeHtml(c?c.addressDetail||'':'')+'" placeholder="상세주소 (동/호수 등, 예: 105동 1203호)" style="margin-top:6px;">'+
+          '<div class="addr-final-preview" id="addr-final-preview">'+escapeHtml(c?c.address||'':'')+'</div>'+
+        '</div>'+
         '<div class="field-row">'+
           '<div class="field"><label>이메일</label><input type="email" id="f-email" value="'+escapeHtml(c?c.email||'':'')+'" placeholder="선택 입력"></div>'+
           '<div class="field"><label>유입경로</label><input type="text" id="f-source" value="'+escapeHtml(c?c.source||'':'')+'" placeholder="예: 네이버 블로그, 지인 소개"></div>'+
@@ -1224,17 +1251,50 @@ function openCustomerModal(id){
       if(el===p2El && el.value.length===4) p3El.focus();
     });
   });
+  function updateAddressPreview(){
+    const type = (document.querySelector('input[name="f-address-type"]:checked')||{}).value || 'road';
+    const road = document.getElementById('f-road-address').value.trim();
+    const jibun = document.getElementById('f-jibun-address').value.trim();
+    const detail = document.getElementById('f-address-detail').value.trim();
+    const base = type==='jibun' ? (jibun||road) : (road||jibun);
+    document.getElementById('addr-final-preview').textContent = base ? (base+(detail?' '+detail:'')) : '';
+  }
+  document.getElementById('btn-addr-search').addEventListener('click', ()=>{
+    new daum.Postcode({
+      oncomplete: function(data){
+        document.getElementById('f-zonecode').value = data.zonecode;
+        document.getElementById('f-road-address').value = data.roadAddress;
+        document.getElementById('f-jibun-address').value = data.jibunAddress;
+        document.getElementById('addr-road-row').classList.remove('hidden');
+        document.getElementById('addr-jibun-row').classList.remove('hidden');
+        document.querySelector('input[name="f-address-type"][value="road"]').checked = true;
+        updateAddressPreview();
+        document.getElementById('f-address-detail').focus();
+      }
+    }).open();
+  });
+  document.querySelectorAll('input[name="f-address-type"]').forEach(el=>{
+    el.addEventListener('change', updateAddressPreview);
+  });
+  document.getElementById('f-address-detail').addEventListener('input', updateAddressPreview);
   document.getElementById('btn-save').addEventListener('click', ()=>{
     const name = document.getElementById('f-name').value.trim();
     const p2 = p2El.value.trim();
     const p3 = p3El.value.trim();
-    const address = document.getElementById('f-address').value.trim();
+    const addressType = (document.querySelector('input[name="f-address-type"]:checked')||{}).value || 'road';
+    const roadAddress = document.getElementById('f-road-address').value.trim();
+    const jibunAddress = document.getElementById('f-jibun-address').value.trim();
+    const zonecode = document.getElementById('f-zonecode').value.trim();
+    const addressDetail = document.getElementById('f-address-detail').value.trim();
+    const addressBase = addressType==='jibun' ? (jibunAddress||roadAddress) : (roadAddress||jibunAddress);
+    const address = addressBase ? (addressBase+(addressDetail?' '+addressDetail:'')) : '';
     if(!name){ alert('이름을 입력해 주세요.'); return; }
     if(p2.length!==4 || p3.length!==4){ alert('연락처 뒷자리 8자리를 모두 입력해 주세요. (예: 1234 / 5678)'); return; }
-    if(!address){ alert('현장주소를 입력해 주세요.'); return; }
+    if(!address){ alert('현장주소를 검색해서 입력해 주세요.'); return; }
     const phone = '010-'+p2+'-'+p3;
     const data = {
       name, phone, address,
+      roadAddress, jibunAddress, zonecode, addressDetail, addressType,
       status: parseInt(document.getElementById('f-status').value,10),
       email: document.getElementById('f-email').value.trim(),
       source: document.getElementById('f-source').value.trim(),
