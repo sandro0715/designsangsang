@@ -119,6 +119,12 @@ table.admin-table .col-cost{width:100px;}
 table.admin-table .col-margin{width:96px; text-align:right;}
 table.admin-table .col-subcat{width:110px;}
 table.admin-table .col-subcat select{width:100%; padding:5px 4px; font-size:11.5px; border:1px solid var(--line-strong); border-radius:6px;}
+table.admin-table .col-reorder{width:150px;}
+.reorder-btns{display:flex; gap:4px; margin-bottom:4px;}
+.btn-reorder{flex:1; padding:4px 0; font-size:11px; border:1px solid var(--line-strong); border-radius:5px; background:var(--surface); color:var(--ink-dim);}
+.btn-reorder:disabled{opacity:.3;}
+.btn-reorder:not(:disabled):hover{background:var(--accent-soft); border-color:var(--accent);}
+.move-select{width:100%; padding:4px 3px; font-size:10.5px; border:1px solid var(--line-strong); border-radius:5px;}
 table.admin-table .col-final{width:110px; text-align:right; font-weight:700;}
 .cost-input{
   width:88px; padding:5px 7px; border:1.3px solid var(--line-strong); border-radius:6px;
@@ -1555,6 +1561,15 @@ function quoteTableHTML(group){
 function costCellHTML(group, i, field, value, placeholder){
   return '<input type="number" class="cost-input num" value="'+(value===undefined||value===null?'':value)+'" placeholder="'+placeholder+'" data-role="cost" data-field="'+field+'" data-group="'+group+'" data-i="'+i+'" onfocus="this.select()">';
 }
+function allGroupOptions(){
+  const opts = [];
+  CAT_ORDER.forEach(cid=>{
+    CAT_GROUPS[cid].forEach(g=>{
+      opts.push({group: g, label: CAT_META[cid].no+'. '+CATALOG[g].label});
+    });
+  });
+  return opts;
+}
 function adminRowHTML(group, i){
   const it = effItem(group, i);
   const price = computePrice(group, i);
@@ -1562,6 +1577,17 @@ function adminRowHTML(group, i){
     '<option value="">(미지정)</option>'+
     SUBCAT_ORDER.map(sc=>'<option value="'+sc+'" '+(it.subcat===sc?'selected':'')+'>'+sc+'</option>').join('')+
     '</select></td>' : '';
+  const isGroup2 = group==="2";
+  const moveOpts = allGroupOptions().filter(o=>o.group!==group).map(o=>'<option value="'+o.group+'">'+o.label+'</option>').join('');
+  const reorderCell = '<td class="col-reorder">'+
+    '<div class="reorder-btns">'+
+      '<button class="btn-reorder" data-role="item-up" data-group="'+group+'" data-i="'+i+'" '+(i===0||isGroup2?'disabled':'')+' title="'+(isGroup2?'소분류로 자동 정렬돼요':'위로 이동')+'">▲</button>'+
+      '<button class="btn-reorder" data-role="item-down" data-group="'+group+'" data-i="'+i+'" '+(i===59||isGroup2?'disabled':'')+' title="'+(isGroup2?'소분류로 자동 정렬돼요':'아래로 이동')+'">▼</button>'+
+    '</div>'+
+    '<select class="move-select" data-role="item-move" data-group="'+group+'" data-i="'+i+'">'+
+      '<option value="">다른 공종으로 이동…</option>'+moveOpts+
+    '</select>'+
+  '</td>';
   return ''+
   '<tr>'+
     '<td class="col-idx num">'+(i+1)+'</td>'+
@@ -1576,8 +1602,59 @@ function adminRowHTML(group, i){
     '<td class="col-cost">'+costCellHTML(group,i,'exp',it.exp,'경비')+'</td>'+
     '<td class="col-margin"><input type="number" class="cost-input num margin-input" step="0.1" value="'+(it.mo!==undefined&&it.mo!==null? pct(it.mo):'')+'" placeholder="기본" data-role="item-margin" data-group="'+group+'" data-i="'+i+'" onfocus="this.select()"> %</td>'+
     '<td class="col-final num"><span class="final-price">'+(price>0? won(price):'')+'</span></td>'+
+    reorderCell+
   '</tr>';
 }
+/* ============ 항목 순서 변경 / 카테고리 이동 ============ */
+function getGroupPairs(group){
+  return CATALOG[group].items.map((item,i)=>({item, override: state.priceOverride[group+"|"+i]}));
+}
+function setGroupPairs(group, pairs){
+  const copy = pairs.slice();
+  while(copy.length < 60) copy.push({item:{n:'',s:'',u:''}, override:undefined});
+  copy.length = 60;
+  CATALOG[group].items = copy.map(p=>p.item);
+  Object.keys(state.priceOverride).forEach(k=>{ if(k.startsWith(group+"|")) delete state.priceOverride[k]; });
+  copy.forEach((p,i)=>{ if(p.override) state.priceOverride[group+"|"+i] = p.override; });
+}
+function trimTrailingBlanks(pairs){
+  const copy = pairs.slice();
+  while(copy.length && !copy[copy.length-1].item.n) copy.pop();
+  return copy;
+}
+async function saveGroupFullToServer(group){
+  await sb.from('catalog_groups').upsert({ group_id: group, label: CATALOG[group].label, margin: CATALOG[group].margin, items: CATALOG[group].items });
+  await sb.from('price_overrides').delete().like('item_key', group+'|%');
+  const rows = [];
+  for(let i=0;i<60;i++){ if(state.priceOverride[group+"|"+i]) rows.push(priceOverrideToDbRow(group,i)); }
+  if(rows.length) await sb.from('price_overrides').upsert(rows);
+}
+async function reorderItem(group, i, direction){
+  const j = i + direction;
+  if(j<0 || j>59) return;
+  const pairs = getGroupPairs(group);
+  const tmp = pairs[i]; pairs[i] = pairs[j]; pairs[j] = tmp;
+  setGroupPairs(group, pairs);
+  await saveGroupFullToServer(group);
+  renderMain();
+}
+async function moveItemToCategory(fromGroup, i, toGroup){
+  let fromPairs = getGroupPairs(fromGroup);
+  const moved = fromPairs.splice(i, 1)[0];
+  setGroupPairs(fromGroup, fromPairs);
+  let toPairs = trimTrailingBlanks(getGroupPairs(toGroup));
+  if(toPairs.length >= 60){ alert('"'+CATALOG[toGroup].label+'" 공종이 이미 60칸 가득 찼어요. 이동할 수 없어요.'); return; }
+  toPairs.push(moved);
+  setGroupPairs(toGroup, toPairs);
+  await Promise.all([saveGroupFullToServer(fromGroup), saveGroupFullToServer(toGroup)]);
+  state.active = cidForGroup(toGroup);
+  renderMain();
+}
+function cidForGroup(group){
+  for(const cid of CAT_ORDER){ if(CAT_GROUPS[cid].includes(group)) return cid; }
+  return group;
+}
+
 function windowPositionsAdminHTML(){
   const rows = state.windowPositions.map(p=>
     '<div class="wp-row"><span>'+escapeHtml(p.label)+'</span><button class="btn-remove" data-role="wp-del" data-id="'+p.id+'" title="삭제">×</button></div>'
@@ -1611,7 +1688,7 @@ function adminTableHTML(group){
     '<thead><tr>'+
       '<th class="col-idx">No</th><th class="col-name">품명 / 규격</th>'+subcatHead+'<th class="col-unit">단위</th>'+
       '<th class="col-cost">재료비</th><th class="col-cost">노무비</th><th class="col-cost">경비</th>'+
-      '<th class="col-margin">개별 마진율</th><th class="col-final">최종 단가</th>'+
+      '<th class="col-margin">개별 마진율</th><th class="col-final">최종 단가</th><th class="col-reorder">순서 / 이동</th>'+
     '</tr></thead>'+
     '<tbody>'+rows+'</tbody>'+
   '</table>';
@@ -1792,6 +1869,30 @@ function bindMainEvents(){
         setPriceField(e.target.dataset.group, parseInt(e.target.dataset.i,10), 'subcat', e.target.value);
         saveDraft();
         renderMain(); // 정렬 순서가 바뀌므로 다시 그림
+      });
+    });
+    $main.querySelectorAll('[data-role="item-up"]').forEach(el=>{
+      el.addEventListener('click', async e=>{
+        const btn = e.target; btn.disabled = true;
+        await reorderItem(btn.dataset.group, parseInt(btn.dataset.i,10), -1);
+      });
+    });
+    $main.querySelectorAll('[data-role="item-down"]').forEach(el=>{
+      el.addEventListener('click', async e=>{
+        const btn = e.target; btn.disabled = true;
+        await reorderItem(btn.dataset.group, parseInt(btn.dataset.i,10), 1);
+      });
+    });
+    $main.querySelectorAll('[data-role="item-move"]').forEach(el=>{
+      el.addEventListener('change', async e=>{
+        const toGroup = e.target.value;
+        if(!toGroup) return;
+        const group = e.target.dataset.group, i = parseInt(e.target.dataset.i,10);
+        const it = effItem(group, i);
+        if(!it.n){ e.target.value=''; return; } // 빈 칸은 이동할 필요 없음
+        if(!confirm('"'+it.n+'" 항목을 "'+CATALOG[toGroup].label+'"(으)로 이동할까요?')){ e.target.value=''; return; }
+        e.target.disabled = true;
+        await moveItemToCategory(group, i, toGroup);
       });
     });
     $main.querySelectorAll('[data-role="cost"]').forEach(el=>{
@@ -2105,22 +2206,27 @@ function buildPrintView(){
       CATALOG[group].items.forEach((it,i)=>{
         const st = getQty(group,i);
         if(st.q>0){
-          const price = rowDisplayPrice(group,i);
-          catRows += '<tr><td>'+escapeHtml(it.n)+(it.s?' <span style="color:#888">('+escapeHtml(it.s)+')</span>':'')+(st.opt?' <b style="color:#3E5C6B">[옵션]</b>':'')+'</td><td>'+escapeHtml(it.u)+'</td><td class="p-right">'+won(price)+'</td><td class="p-right">'+st.q+'</td><td class="p-right">'+won(lineAmt(price,st.q))+'</td></tr>';
+          const parts = rowPriceParts(group,i);
+          const price = parts.mat+parts.labor+parts.exp;
+          catRows += '<tr><td>'+escapeHtml(it.n)+(it.s?' <span style="color:#888">('+escapeHtml(it.s)+')</span>':'')+(st.opt?' <b style="color:#3E5C6B">[옵션]</b>':'')+'</td><td>'+escapeHtml(it.u)+'</td>'+
+            '<td class="p-right">'+(parts.mat>0?won(parts.mat):'-')+'</td><td class="p-right">'+(parts.labor>0?won(parts.labor):'-')+'</td><td class="p-right">'+(parts.exp>0?won(parts.exp):'-')+'</td>'+
+            '<td class="p-right">'+st.q+'</td><td class="p-right">'+won(lineAmt(price,st.q))+'</td></tr>';
         }
       });
       getCustomList(group).forEach(it=>{
         if(it.q>0){
-          catRows += '<tr><td>'+escapeHtml(it.n)+(it.opt?' <b style="color:#3E5C6B">[옵션]</b>':'')+'</td><td>'+escapeHtml(it.u)+'</td><td class="p-right">'+won(it.p)+'</td><td class="p-right">'+it.q+'</td><td class="p-right">'+won(lineAmt(it.p,it.q))+'</td></tr>';
+          catRows += '<tr><td>'+escapeHtml(it.n)+(it.s?' <span style="color:#888">('+escapeHtml(it.s)+')</span>':'')+(it.opt?' <b style="color:#3E5C6B">[옵션]</b>':'')+'</td><td>'+escapeHtml(it.u)+'</td>'+
+            '<td class="p-right">'+won(it.p)+'</td><td class="p-right">-</td><td class="p-right">-</td>'+
+            '<td class="p-right">'+it.q+'</td><td class="p-right">'+won(lineAmt(it.p,it.q))+'</td></tr>';
         }
       });
     });
     if(catRows){
-      rows += '<tr class="p-cat-row"><td colspan="5">'+meta.no+'. '+meta.title+'</td></tr>' + catRows;
+      rows += '<tr class="p-cat-row"><td colspan="7">'+meta.no+'. '+meta.title+'</td></tr>' + catRows;
     }
   });
   if(!rows){
-    rows = '<tr><td colspan="5" style="text-align:center;color:#999;">선택된 항목이 없습니다.</td></tr>';
+    rows = '<tr><td colspan="7" style="text-align:center;color:#999;">선택된 항목이 없습니다.</td></tr>';
   }
   const html = ''+
     '<div class="p-title">견 적 서</div>'+
@@ -2133,7 +2239,7 @@ function buildPrintView(){
       '<div><span>전시장 주소</span> 서울 강동구 고덕로 133, 롯데캐슬퍼스트상가 209호 (암사동)</div>'+
       '<div><span>담당자</span> 윤상돈 실장</div>'+
     '</div>'+
-    '<table class="p-table"><thead><tr><th>품명 / 규격</th><th>단위</th><th class="p-right">단가</th><th class="p-right">수량</th><th class="p-right">금액</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+    '<table class="p-table"><thead><tr><th>품명 / 규격</th><th>단위</th><th class="p-right">재료비</th><th class="p-right">노무비</th><th class="p-right">경비</th><th class="p-right">수량</th><th class="p-right">금액</th></tr></thead><tbody>'+rows+'</tbody></table>'+
     '<table class="p-totals"><tbody>'+
       '<tr><td>'+(t.isDirect?'A. 실행원가 소계 (마진 0%)':'A. 직접공사비 소계')+'</td><td class="p-right">'+won(t.directTotal)+' 원</td></tr>'+
       '<tr><td>'+(t.isDirect?'B. 수수료+공정관리비 소계':'B. 간접공사비 소계 (관리비+잡비)')+'</td><td class="p-right">'+won(t.indirectTotal)+' 원</td></tr>'+
