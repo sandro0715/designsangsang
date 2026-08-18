@@ -1606,14 +1606,13 @@ function adminRowHTML(group, i){
     '<option value="">(미지정)</option>'+
     SUBCAT_ORDER.map(sc=>'<option value="'+sc+'" '+(it.subcat===sc?'selected':'')+'>'+sc+'</option>').join('')+
     '</select></td>' : '';
-  const isGroup2 = group==="2";
   const checked = !!state.adminMoveSelected[group+"|"+i];
   const dragCell = '<td class="col-drag">'+
-    (isGroup2 ? '<span class="drag-handle disabled" title="소분류로 자동 정렬돼요">⋮⋮</span>' : '<span class="drag-handle" title="드래그해서 순서 변경">⋮⋮</span>')+
+    '<span class="drag-handle" title="드래그해서 순서 변경 (같은 소분류 안에서 순서가 정해져요)">⋮⋮</span>'+
     '<input type="checkbox" class="move-check" data-role="move-check" data-group="'+group+'" data-i="'+i+'" '+(checked?'checked':'')+' title="이동할 항목으로 선택">'+
   '</td>';
   return ''+
-  '<tr draggable="'+(isGroup2?'false':'true')+'" data-group="'+group+'" data-i="'+i+'">'+
+  '<tr draggable="true" data-group="'+group+'" data-i="'+i+'">'+
     dragCell+
     '<td class="col-idx num">'+(i+1)+'</td>'+
     '<td class="col-name">'+
