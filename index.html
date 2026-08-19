@@ -88,6 +88,9 @@ input,select,textarea{font-family:inherit;}
 .tool-frame-topbar{flex:none; display:flex; align-items:center; gap:14px; padding:12px 20px; border-bottom:1px solid var(--line); font-size:13px; font-weight:700; color:var(--ink-dim);}
 
 .settings-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:14px; margin-top:20px;}
+.cust-del-cell{width:36px; text-align:center;}
+.btn-remove{border:1.3px solid var(--danger); color:var(--danger); background:transparent; width:26px; height:26px; border-radius:6px; font-size:14px; line-height:1;}
+.btn-remove:hover{background:var(--danger); color:#fff;}
 
 .cust-search{width:100%; max-width:360px; padding:9px 12px; border:1.3px solid var(--line-strong); border-radius:8px; font-size:13px; margin:18px 0 14px;}
 .est-hub-list{display:flex; flex-direction:column; gap:10px;}
@@ -296,6 +299,8 @@ table.list tbody tr:hover{background:var(--surface-2);}
 .detail-close{position:absolute; top:16px; right:16px; border:none; background:transparent; font-size:20px; color:var(--ink-faint);}
 .detail-name{font-size:19px; font-weight:800; margin:4px 0 3px;}
 .detail-row{display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--line); font-size:12.5px;}
+.onenote-link{color:var(--accent); font-weight:700; text-decoration:none;}
+.onenote-link:hover{text-decoration:underline;}
 .detail-row .k{color:var(--ink-faint);}
 .detail-row .v{font-weight:600; text-align:right;}
 .detail-section-title{font-size:11px; font-weight:700; color:var(--ink-faint); text-transform:uppercase; letter-spacing:.05em; margin:20px 0 8px;}
@@ -605,14 +610,14 @@ function customerToDb(c){
     status:c.status, memo:c.memo||null, email:c.email||null, site_password:c.sitePassword||null,
     entrance_password:c.entrancePassword||null, created_at:c.createdAt||new Date().toISOString(),
     road_address:c.roadAddress||null, jibun_address:c.jibunAddress||null, zonecode:c.zonecode||null,
-    address_detail:c.addressDetail||null, address_type:c.addressType||'road' };
+    address_detail:c.addressDetail||null, address_type:c.addressType||'road', onenote_link:c.onenoteLink||null };
 }
 function customerFromDb(r){
   return { id:r.id, name:r.name, phone:r.phone||'', address:r.address||'', source:r.source||'',
     status:r.status, memo:r.memo||'', email:r.email||'', sitePassword:r.site_password||'',
     entrancePassword:r.entrance_password||'', createdAt:r.created_at,
     roadAddress:r.road_address||'', jibunAddress:r.jibun_address||'', zonecode:r.zonecode||'',
-    addressDetail:r.address_detail||'', addressType:r.address_type||'road' };
+    addressDetail:r.address_detail||'', addressType:r.address_type||'road', onenoteLink:r.onenote_link||'' };
 }
 function eventToDb(e){
   return { id:e.id, title:e.title, type:e.type, customer_id:e.customerId||null, date:e.date,
@@ -963,14 +968,15 @@ function renderCustomers(){
   if(filtered.length===0){
     html += '<div class="card"><div class="empty-note">조건에 맞는 고객이 없습니다.</div></div>';
   } else {
-    html += '<table class="list"><thead><tr><th>이름</th><th>연락처</th><th>상태</th><th>유입경로</th><th>등록일</th></tr></thead><tbody>';
+    html += '<table class="list"><thead><tr><th>이름</th><th>연락처</th><th>상태</th><th>유입경로</th><th>등록일</th><th></th></tr></thead><tbody>';
     filtered.forEach(c=>{
-      html += '<tr data-open-customer="'+c.id+'">'+
-        '<td class="cust-name">'+escapeHtml(c.name)+'</td>'+
-        '<td class="cust-phone">'+escapeHtml(c.phone||'-')+'</td>'+
-        '<td><span class="tag tag-'+c.status+'">'+statusLabel(c.status)+'</span></td>'+
-        '<td>'+escapeHtml(c.source||'-')+'</td>'+
-        '<td class="num">'+ (c.createdAt? c.createdAt.slice(0,10) : '-') +'</td>'+
+      html += '<tr>'+
+        '<td class="cust-name" data-open-customer="'+c.id+'">'+escapeHtml(c.name)+'</td>'+
+        '<td class="cust-phone" data-open-customer="'+c.id+'">'+escapeHtml(c.phone||'-')+'</td>'+
+        '<td data-open-customer="'+c.id+'"><span class="tag tag-'+c.status+'">'+statusLabel(c.status)+'</span></td>'+
+        '<td data-open-customer="'+c.id+'">'+escapeHtml(c.source||'-')+'</td>'+
+        '<td class="num" data-open-customer="'+c.id+'">'+ (c.createdAt? c.createdAt.slice(0,10) : '-') +'</td>'+
+        '<td class="cust-del-cell"><button class="btn-remove" data-del-customer="'+c.id+'" title="고객 삭제">×</button></td>'+
       '</tr>';
     });
     html += '</tbody></table>';
@@ -982,6 +988,19 @@ function renderCustomers(){
   document.getElementById('cust-status-filter').addEventListener('change', e=>{ state.custFilter.status = e.target.value; renderCustomers(); });
   $main.querySelectorAll('[data-open-customer]').forEach(el=>{
     el.addEventListener('click', ()=> openCustomerDetail(el.dataset.openCustomer));
+  });
+  $main.querySelectorAll('[data-del-customer]').forEach(el=>{
+    el.addEventListener('click', e=>{
+      e.stopPropagation();
+      const c = customerById(el.dataset.delCustomer);
+      if(!c) return;
+      if(confirm('"'+c.name+'" 고객 정보를 삭제할까요? 연결된 일정/프로젝트/견적은 유지되지만 고객 연결이 해제돼요.')){
+        state.customers = state.customers.filter(x=>x.id!==c.id);
+        state.events.forEach(ev=>{ if(ev.customerId===c.id) ev.customerId=null; });
+        state.projects.forEach(p=>{ if(p.customerId===c.id) p.customerId=null; });
+        save(); renderCustomers();
+      }
+    });
   });
 }
 
@@ -1234,6 +1253,7 @@ function openCustomerModal(id){
           '<div class="field"><label>현장 비밀번호</label><input type="text" id="f-site-pw" value="'+escapeHtml(c?c.sitePassword||'':'')+'" placeholder="도어락 비밀번호 등"></div>'+
           '<div class="field"><label>1층 출입 비밀번호</label><input type="text" id="f-entrance-pw" value="'+escapeHtml(c?c.entrancePassword||'':'')+'" placeholder="공동현관 비밀번호"></div>'+
         '</div>'+
+        '<div class="field"><label>원노트 링크</label><input type="text" id="f-onenote" value="'+escapeHtml(c?c.onenoteLink||'':'')+'" placeholder="원노트 페이지 &quot;링크 복사&quot;로 붙여넣기"></div>'+
         '<div class="field"><label>메모</label><textarea id="f-memo">'+escapeHtml(c?c.memo||'':'')+'</textarea></div>'+
         '<div class="modal-actions">'+
           (c? '<button class="btn btn-danger" id="btn-delete">삭제</button>':'')+
@@ -1300,6 +1320,7 @@ function openCustomerModal(id){
       source: document.getElementById('f-source').value.trim(),
       sitePassword: document.getElementById('f-site-pw').value.trim(),
       entrancePassword: document.getElementById('f-entrance-pw').value.trim(),
+      onenoteLink: document.getElementById('f-onenote').value.trim(),
       memo: document.getElementById('f-memo').value.trim(),
     };
     if(c){
@@ -1433,6 +1454,7 @@ function openCustomerDetail(id){
       (c.email? '<div class="detail-row"><span class="k">이메일</span><span class="v">'+escapeHtml(c.email)+'</span></div>' : '')+
       (c.sitePassword? '<div class="detail-row"><span class="k">현장 비밀번호</span><span class="v">'+escapeHtml(c.sitePassword)+'</span></div>' : '')+
       (c.entrancePassword? '<div class="detail-row"><span class="k">1층 출입 비밀번호</span><span class="v">'+escapeHtml(c.entrancePassword)+'</span></div>' : '')+
+      (c.onenoteLink? '<div class="detail-row"><span class="k">원노트</span><span class="v"><a href="'+escapeHtml(c.onenoteLink)+'" target="_blank" rel="noopener" class="onenote-link">📝 상담 메모 열기 →</a></span></div>' : '')+
       '<div class="detail-row"><span class="k">유입경로</span><span class="v">'+escapeHtml(c.source||'-')+'</span></div>'+
       '<div class="detail-row"><span class="k">등록일</span><span class="v">'+(c.createdAt?c.createdAt.slice(0,10):'-')+'</span></div>';
   if(c.memo){ html += '<div class="detail-section-title">메모</div><div class="detail-memo">'+escapeHtml(c.memo)+'</div>'; }
