@@ -102,6 +102,14 @@ input,select,textarea{font-family:inherit;}
 .est-hub-quote-row{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:7px 8px; border-radius:6px; cursor:pointer; font-size:12.5px;}
 .ct-hub-list{display:flex; flex-direction:column; gap:8px; margin-top:16px;}
 .ct-hub-row{display:flex; align-items:center; justify-content:space-between; gap:12px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:12px 16px;}
+.site-list{display:flex; flex-direction:column; gap:10px; margin-top:16px;}
+.site-card{display:flex; align-items:center; gap:12px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px; cursor:pointer;}
+.site-card:hover{border-color:var(--accent);}
+.site-color-dot{width:14px; height:14px; border-radius:50%; flex:none;}
+.site-card-main{flex:1;}
+.site-card-name{font-size:14px; font-weight:800;}
+.site-card-sub{font-size:11.5px; color:var(--ink-faint); margin-top:3px;}
+.site-card-meta{font-size:11px; color:var(--ink-faint); flex:none;}
 .ct-hub-name{font-size:13.5px; font-weight:700;}
 .ct-hub-meta{font-size:11px; color:var(--ink-faint); margin-top:3px;}
 .est-hub-quote-row:hover{background:var(--surface-2);}
@@ -588,6 +596,7 @@ const state = {
   drag: null,
   estimateQuery: '', // 견적 계산기 탭으로 넘어갈 때 붙일 쿼리스트링 (고객 연결용)
   estimateSection: null, // '견적/계약관리' 하위 화면: null(허브)/'quotes'/'contracts'/'archive'
+  toolsSection: null, // '견적 도구' 하위 화면: null(허브)/'kitchen'/'tile'
   settingsSection: null, // 설정 탭 안에서 어느 세부 설정을 보고 있는지
 };
 
@@ -755,8 +764,8 @@ const NAV_ITEMS = [
   {id:'schedule',  no:'2', label:'일정 관리'},
   {id:'customers', no:'3', label:'고객 관리'},
   {id:'estimate',  no:'4', label:'견적/계약관리'},
-  {id:'kitchen',   no:'5', label:'주방 견적'},
-  {id:'tile',      no:'6', label:'타일 수량'},
+  {id:'sites',     no:'5', label:'현장 관리'},
+  {id:'tools',     no:'6', label:'견적 도구'},
   {id:'projects',  no:'7', label:'프로젝트 현황'},
   {id:'settings',  no:'8', label:'설정', adminOnly:true},
 ];
@@ -771,6 +780,7 @@ function renderNav(){
     btn.addEventListener('click', ()=>{
       state.view = btn.dataset.nav;
       if(btn.dataset.nav==='estimate'){ state.estimateQuery=''; state.estimateSection=null; }
+      if(btn.dataset.nav==='tools'){ state.toolsSection=null; }
       if(btn.dataset.nav==='settings') state.settingsSection=null;
       renderMain(); renderNav();
     });
@@ -789,8 +799,12 @@ function renderMain(){
     if(state.estimateSection==='contracts') return renderContractsHub();
     if(state.estimateSection==='archive') return renderQuoteArchive();
   }
-  if(state.view==='kitchen') return renderToolFrame('kitchen.html','주방 견적 계산기');
-  if(state.view==='tile') return renderToolFrame('tile.html','타일 수량 산출');
+  if(state.view==='sites') return renderSites();
+  if(state.view==='tools'){
+    if(!state.toolsSection) return renderToolsHub();
+    if(state.toolsSection==='kitchen') return renderToolFrame('kitchen.html','주방 견적 계산기', true, ()=>{ state.toolsSection=null; renderMain(); }, '견적 도구');
+    if(state.toolsSection==='tile') return renderToolFrame('tile.html','타일 수량 산출', true, ()=>{ state.toolsSection=null; renderMain(); }, '견적 도구');
+  }
   if(state.view==='projects') return renderProjects();
   if(state.view==='settings') return renderSettings();
 }
@@ -1080,14 +1094,92 @@ function renderCustomers(){
 }
 
 /* ============ Estimate placeholder ============ */
-function renderToolFrame(src, title, withBack){
+function renderToolFrame(src, title, withBack, onBack, backLabel){
   $main.innerHTML =
     '<div class="tool-frame-wrap">'+
-      (withBack ? '<div class="tool-frame-topbar"><button class="btn btn-ghost btn-sm" id="btn-frame-back">← 견적 관리로</button><span>'+escapeHtml(title)+'</span></div>' : '')+
+      (withBack ? '<div class="tool-frame-topbar"><button class="btn btn-ghost btn-sm" id="btn-frame-back">← '+escapeHtml(backLabel||'견적 관리')+'로</button><span>'+escapeHtml(title)+'</span></div>' : '')+
       '<iframe class="tool-frame" src="'+src+'" title="'+escapeHtml(title)+'"></iframe>'+
     '</div>';
   const backBtn = document.getElementById('btn-frame-back');
-  if(backBtn) backBtn.addEventListener('click', ()=>{ state.estimateQuery=''; renderMain(); });
+  if(backBtn) backBtn.addEventListener('click', onBack || (()=>{ state.estimateQuery=''; renderMain(); }));
+}
+
+/* ============ 견적 도구 허브 (주방견적/타일수량) ============ */
+function renderToolsHub(){
+  let html = '<div class="page-head"><div><h1>견적 도구</h1><div class="desc">현장 실측할 때 쓰는 보조 계산기예요.</div></div></div>';
+  html += '<div class="settings-grid">';
+  const cards = [
+    {id:'kitchen', icon:'🍳', title:'주방 견적 계산기', desc:'주방 도면을 그려가며 자재·시공 견적을 뽑아요.'},
+    {id:'tile', icon:'◻️', title:'타일 수량 산출', desc:'공간별 타일 수량을 박스 단위까지 계산해요.'},
+  ];
+  cards.forEach(c=>{
+    html += '<button class="settings-card" data-tools-section="'+c.id+'">'+
+      '<div class="settings-card-ico">'+c.icon+'</div>'+
+      '<div class="settings-card-title">'+c.title+'</div>'+
+      '<div class="settings-card-desc">'+c.desc+'</div>'+
+    '</button>';
+  });
+  html += '</div>';
+  $main.innerHTML = html;
+  $main.querySelectorAll('[data-tools-section]').forEach(el=>{
+    el.addEventListener('click', ()=>{ state.toolsSection = el.dataset.toolsSection; renderMain(); });
+  });
+}
+
+/* ============ 현장 관리 ============ */
+function renderSites(){
+  let html = '<div class="page-head"><div><h1>현장 관리</h1><div class="desc">계약이 확정되면 자동으로 현장이 생성돼요.</div></div></div>';
+  const sites = state.sites || [];
+  if(sites.length===0){
+    html += '<div class="empty-note">아직 생성된 현장이 없어요. 계약을 확정하면 여기에 자동으로 나타나요.</div>';
+  } else {
+    html += '<div class="site-list">';
+    sites.forEach(s=>{
+      const cust = s.customerId ? customerById(s.customerId) : null;
+      const evts = state.events.filter(e=>e.siteId===s.id);
+      const upcoming = evts.filter(e=>e.date >= todayISO() && e.status!=='confirmed').length;
+      let d = ''; try{ d = new Date(s.createdAt).toLocaleDateString('ko-KR'); }catch(e){}
+      html += '<div class="site-card" data-open-site="'+s.id+'">'+
+        '<div class="site-color-dot" style="background:'+s.color+';"></div>'+
+        '<div class="site-card-main">'+
+          '<div class="site-card-name">'+escapeHtml(s.name)+' <span class="tag tag-'+(s.status==='진행중'?'pending':'signed')+'">'+escapeHtml(s.status)+'</span></div>'+
+          '<div class="site-card-sub">'+(cust?escapeHtml(cust.name)+' · ':'')+escapeHtml(s.address||'')+'</div>'+
+        '</div>'+
+        '<div class="site-card-meta">'+d+' 생성 · 일정 '+evts.length+'건'+(upcoming?' · 확정 대기 '+upcoming+'건':'')+'</div>'+
+      '</div>';
+    });
+    html += '</div>';
+  }
+  $main.innerHTML = html;
+  $main.querySelectorAll('[data-open-site]').forEach(el=>{
+    el.addEventListener('click', ()=>{ openSiteDetail(el.dataset.openSite); });
+  });
+}
+function openSiteDetail(siteId){
+  const s = state.sites.find(x=>x.id===siteId);
+  if(!s) return;
+  const cust = s.customerId ? customerById(s.customerId) : null;
+  const evts = state.events.filter(e=>e.siteId===siteId).sort((a,b)=>a.date.localeCompare(b.date));
+  let html = '<div class="modal-backdrop" id="modal-backdrop"><div class="modal" style="max-width:560px;">'+
+    '<button class="modal-close" id="modal-close">×</button>'+
+    '<div class="detail-header"><span class="site-color-dot" style="background:'+s.color+';"></span><h2>'+escapeHtml(s.name)+'</h2></div>'+
+    '<div class="detail-row"><span class="k">고객</span><span class="v">'+(cust?escapeHtml(cust.name):'-')+'</span></div>'+
+    '<div class="detail-row"><span class="k">주소</span><span class="v">'+escapeHtml(s.address||'-')+'</span></div>'+
+    '<div class="detail-row"><span class="k">상태</span><span class="v">'+escapeHtml(s.status)+'</span></div>'+
+    '<div class="detail-section-title">이 현장의 일정 ('+evts.length+')</div>';
+  if(evts.length===0){
+    html += '<div class="empty-note">등록된 일정이 없어요.</div>';
+  } else {
+    evts.forEach(e=>{
+      html += '<div class="agenda-item"><div class="agenda-time num">'+e.date+'</div>'+
+        '<div style="flex:1;">'+statusPrefix(e.status)+escapeHtml(e.title)+'</div></div>';
+    });
+  }
+  html += '</div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+  const close = ()=>{ const el = document.getElementById('modal-backdrop'); if(el) el.remove(); };
+  document.getElementById('modal-close').addEventListener('click', close);
+  document.getElementById('modal-backdrop').addEventListener('click', e=>{ if(e.target.id==='modal-backdrop') close(); });
 }
 
 /* ============ 견적/계약관리 허브 (3분류) ============ */
