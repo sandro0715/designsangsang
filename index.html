@@ -787,7 +787,9 @@ function renderMain(){
 
 /* ============ 설정 ============ */
 const SETTINGS_SECTIONS = [
-  {id:'estimate', title:'견적관리설정', desc:'견적 계산기의 단가·마진·품목을 관리해요.', icon:'💰'},
+  {id:'estimate', title:'견적관리설정', desc:'견적 계산기의 단가·마진·품목을 관리해요.', icon:'💰', src:'estimate.html?mode=admin'},
+  {id:'directfee', title:'직영공사 수수료', desc:'직영공사 수수료율·공정관리비·직종별 일당을 관리해요.', icon:'⚙️', src:'estimate.html?mode=admin&active=config'},
+  {id:'products', title:'제품 카탈로그', desc:'타일·마루·조명 등 실제 자재 사진·가격을 등록해요.', icon:'📦', src:'estimate.html?mode=admin&active=products'},
 ];
 function renderSettings(){
   if(window.CURRENT_ROLE !== 'admin'){
@@ -812,14 +814,15 @@ function renderSettings(){
     });
     return;
   }
-  if(state.settingsSection === 'estimate'){
+  const sec = SETTINGS_SECTIONS.find(s=>s.id===state.settingsSection);
+  if(sec){
     $main.innerHTML =
       '<div class="tool-frame-wrap">'+
         '<div class="tool-frame-topbar">'+
           '<button class="btn btn-ghost btn-sm" id="btn-settings-back">← 설정으로</button>'+
-          '<span>견적관리설정</span>'+
+          '<span>'+escapeHtml(sec.title)+'</span>'+
         '</div>'+
-        '<iframe class="tool-frame" src="estimate.html?mode=admin" title="견적관리설정"></iframe>'+
+        '<iframe class="tool-frame" src="'+sec.src+'" title="'+escapeHtml(sec.title)+'"></iframe>'+
       '</div>';
     document.getElementById('btn-settings-back').addEventListener('click', ()=>{ state.settingsSection = null; renderMain(); });
   }
