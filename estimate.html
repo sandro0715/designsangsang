@@ -642,6 +642,10 @@ table.items tbody tr.has-qty:hover{background:#F8F0DC;}
 tr.qadjust-row{background:var(--accent-soft);}
 .quote-adjust-input{width:78px; text-align:right;}
 .action-row .btn-secondary.active{background:var(--accent); color:#fff; border-color:var(--accent);}
+.quote-toolbar{display:flex; gap:8px; padding:10px 28px; background:var(--surface-2); border-bottom:1px solid var(--line);}
+.toolbar-btn{padding:8px 16px; border:1.3px solid var(--line-strong); border-radius:8px; background:var(--surface); font-size:12.5px; font-weight:700; color:var(--ink-dim);}
+.toolbar-btn:hover{border-color:var(--accent);}
+.toolbar-btn.active{background:var(--accent); color:#fff; border-color:var(--accent);}
 .field-row-2{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
 .config-form .field textarea{width:100%; padding:9px 10px; border:1.3px solid var(--line-strong); border-radius:8px; font-size:13px; font-family:inherit; resize:vertical;}
 .ct-link-box{margin-top:18px; background:var(--surface-2); border:1.3px dashed var(--line-strong); border-radius:10px; padding:16px;}
@@ -690,6 +694,11 @@ tr.qadjust-row{background:var(--accent-soft);}
       <label>&nbsp;</label>
       <button class="btn-primary" id="quick-save-btn" style="width:100%;">이 견적 저장</button>
     </div>
+  </div>
+
+  <div class="quote-toolbar" id="quote-toolbar">
+    <button class="toolbar-btn" id="btn-adjust-toggle">항목별 상세설정</button>
+    <button class="toolbar-btn" id="btn-product-toggle">제품에서 고르기</button>
   </div>
 
   <div class="layout">
@@ -759,7 +768,8 @@ const state = {
   quoteConfig: { feePercent:15, adminFeeMode:'fixed', adminFeeValue:1000000, carpenterDayWage:350000, tileDayWage:250000, filmDayWage:250000, electricDayWage:250000, vatOnFeeDefault:true },
   windowPositions: [], // 창호 위치 목록 (서버에서 불러옴)
   adminMoveSelected: {}, // 설정 화면: 다른 공종으로 이동시킬 항목 체크 상태 (key `${group}|${i}` -> true)
-  quoteAdjustMode: false,   // 이 견적서 안에서만 단가·마진 조정하는 모드 on/off
+  quoteAdjustMode: false,   // 항목별 상세설정 (재료비·노무비·경비·마진율을 이 견적서에서만 조정) on/off
+  productPickMode: false,   // 제품에서 고르기 (등록된 제품 드롭다운) on/off - 상세설정과 별개
   quoteItemOverride: {},    // 이 견적서 전용 단가·마진 수정값 (key `${group}|${i}` -> {mat?,labor?,exp?,mo?}) - 서버 기본 단가표에는 영향 없음
   carpenterDaysOverride: {}, // 목공사 품수 수동 조정값 (group -> number|null)
 };
@@ -1178,7 +1188,7 @@ function saveDraft(){
       qty: state.qty, custom: state.custom,
       meta: state.meta, selected: state.selected, phase: state.phase, flow: state.flow, selectIdx: state.selectIdx, catView: state.catView,
       customerId: state.customerId, currentQuoteId: state.currentQuoteId,
-      carpenterDaysOverride: state.carpenterDaysOverride, quoteItemOverride: state.quoteItemOverride, quoteAdjustMode: state.quoteAdjustMode,
+      carpenterDaysOverride: state.carpenterDaysOverride, quoteItemOverride: state.quoteItemOverride, quoteAdjustMode: state.quoteAdjustMode, productPickMode: state.productPickMode,
     }));
   }catch(e){ /* storage unavailable (e.g. private mode) -- fail silently */ }
 }
@@ -1200,6 +1210,7 @@ function loadDraft(){
     state.carpenterDaysOverride = obj.carpenterDaysOverride || {};
     state.quoteItemOverride = obj.quoteItemOverride || {};
     state.quoteAdjustMode = obj.quoteAdjustMode || false;
+    state.productPickMode = obj.productPickMode || false;
     if(state.phase === 'build' && selectedCountAll()===0) backfillSelectedFromQty();
   }catch(e){ /* ignore corrupt draft */ }
 }
@@ -1694,14 +1705,14 @@ function itemRowHTML(group, i){
   const marginCell = adj
     ? '<input type="number" step="1" class="cost-input num" style="width:56px;" value="'+effMarginPct+'" data-role="qadjust-margin" data-group="'+group+'" data-i="'+i+'" onfocus="this.select()">'
     : '';
-  const groupProducts = adj ? (PRODUCT_CACHE||[]).filter(p=>p.group_id===group) : [];
-  const productPicker = (adj && groupProducts.length>0)
+  const groupProducts = state.productPickMode ? (PRODUCT_CACHE||[]).filter(p=>p.group_id===group) : [];
+  const productPicker = (state.productPickMode && groupProducts.length>0)
     ? '<select class="product-pick-select" data-role="product-pick" data-group="'+group+'" data-i="'+i+'"><option value="">제품에서 선택…</option>'+groupProducts.map(p=>'<option value="'+p.id+'">'+escapeHtml(p.name)+' (₩'+won(p.price)+')</option>').join('')+'</select>'
     : '';
   return ''+
   '<tr class="'+(st.q>0?'has-qty':'')+(adj?' qadjust-row':'')+'">'+
     '<td class="col-idx num">'+(i+1)+'</td>'+
-    '<td class="col-name"><div class="item-name">'+escapeHtml(it.n)+'</div>'+(it.s?'<div class="item-spec">'+escapeHtml(it.s)+'</div>':'')+(adj?'<div class="item-spec">개별 마진율 '+marginCell+' %</div>'+productPicker:'')+'</td>'+
+    '<td class="col-name"><div class="item-name">'+escapeHtml(it.n)+'</div>'+(it.s?'<div class="item-spec">'+escapeHtml(it.s)+'</div>':'')+(adj?'<div class="item-spec">개별 마진율 '+marginCell+' %</div>':'')+productPicker+'</td>'+
     '<td class="col-unit">'+escapeHtml(it.u)+'</td>'+
     '<td class="col-cost num">'+costCell(parts.mat,'mat')+'</td>'+
     '<td class="col-cost num">'+costCell(parts.labor,'labor')+'</td>'+
@@ -2526,12 +2537,7 @@ function summaryHTML(){
     '<button class="btn-secondary" id="btn-reset">수량 초기화</button>'+
     '<button class="btn-primary" id="btn-print">견적서 출력</button>'+
   '</div>';
-  html += '<div class="action-row">'+
-    '<button class="btn-secondary '+(state.quoteAdjustMode?'active':'')+'" id="btn-adjust-toggle" style="flex:1 1 100%;">'+(state.quoteAdjustMode?'✓ 이 견적 단가·마진 조정 중 (끄기)':'이 견적만 단가·마진율 조정')+'</button>'+
-  '</div>';
-  html += '<div class="footnote">'+(state.quoteAdjustMode
-    ? '지금 이 견적서 안에서만 항목별 재료비·노무비·경비·마진율을 바로 조정할 수 있어요. 여기서 바꿔도 다른 견적이나 기본 단가표(설정)에는 전혀 영향이 없어요.'
-    : '단가·마진을 이 견적서에서만 바꾸고 싶으면 위 버튼을 눌러 조정 모드를 켜세요. 전체 기본 단가를 바꾸려면 "설정 → 견적관리설정"을 이용해 주세요.')+'</div>';
+  html += '<div class="footnote">상단 "항목별 상세설정"을 켜면 이 견적서 안에서만 재료비·노무비·경비·마진율을 조정할 수 있어요 (기본 단가표엔 영향 없음). "제품에서 고르기"를 켜면 등록해둔 제품을 드롭다운으로 바로 불러올 수 있어요.</div>';
   return html;
 }
 function renderSummary(){
@@ -2553,11 +2559,6 @@ function bindSummaryEvents(){
       state.currentQuoteId = null;
       saveDraft(); renderAll();
     }
-  });
-  document.getElementById('btn-adjust-toggle').addEventListener('click', async ()=>{
-    state.quoteAdjustMode = !state.quoteAdjustMode;
-    if(state.quoteAdjustMode && !PRODUCT_CACHE) await loadProductCache();
-    saveDraft(); renderAll();
   });
   document.getElementById('btn-print').addEventListener('click', buildPrintView);
 }
@@ -2603,6 +2604,26 @@ function bindMeta(){
     btn.textContent = ok ? '저장됨 ('+label+') ✓' : '저장 실패';
     setTimeout(()=>{ if(document.body.contains(btn)) btn.textContent = '이 견적 저장'; }, 2000);
   });
+  updateToolbarButtons();
+  document.getElementById('btn-adjust-toggle').addEventListener('click', ()=>{
+    state.quoteAdjustMode = !state.quoteAdjustMode;
+    saveDraft();
+    updateToolbarButtons();
+    if(state.mode==='quote' && state.phase==='build') renderMain();
+  });
+  document.getElementById('btn-product-toggle').addEventListener('click', async ()=>{
+    state.productPickMode = !state.productPickMode;
+    if(state.productPickMode && !PRODUCT_CACHE) await loadProductCache();
+    saveDraft();
+    updateToolbarButtons();
+    if(state.mode==='quote' && state.phase==='build') renderMain();
+  });
+}
+function updateToolbarButtons(){
+  const adjBtn = document.getElementById('btn-adjust-toggle');
+  const prodBtn = document.getElementById('btn-product-toggle');
+  if(adjBtn) adjBtn.classList.toggle('active', state.quoteAdjustMode);
+  if(prodBtn) prodBtn.classList.toggle('active', state.productPickMode);
 }
 function updateQuoteTypeSwitch(){
   document.querySelectorAll('[data-qt]').forEach(btn=>{
@@ -2734,6 +2755,8 @@ document.addEventListener('input', e=>{
     if(topbar) topbar.style.display = 'none';
     const metaBar = document.querySelector('.meta-bar');
     if(metaBar) metaBar.style.display = 'none';
+    const toolbar = document.getElementById('quote-toolbar');
+    if(toolbar) toolbar.style.display = 'none';
     const summary = document.getElementById('summary-content');
     if(summary) summary.style.display = 'none';
     document.body.classList.add('embed-admin');
