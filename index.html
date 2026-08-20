@@ -158,7 +158,13 @@ input,select,textarea{font-family:inherit;}
 .panel-title .link{font-size:11.5px; font-weight:600; color:var(--accent);}
 .empty-note{color:var(--ink-faint); font-size:12.5px; padding:16px 4px; text-align:center;}
 
-.agenda-item{display:flex; gap:12px; padding:10px 4px; border-bottom:1px solid var(--line);}
+.agenda-item{display:flex; gap:12px; padding:10px 4px; border-bottom:1px solid var(--line); align-items:center;}
+.site-dot{width:9px; height:9px; border-radius:50%; flex:none;}
+.status-tag{font-size:11px; font-weight:800;}
+.status-tentative{color:var(--ink-faint);}
+.status-confirmed{color:var(--accent-deep);}
+.btn-confirm-event{flex:none; padding:5px 10px; font-size:11px; font-weight:700; border:1.3px solid var(--accent); color:var(--accent); background:transparent; border-radius:6px;}
+.btn-confirm-event:hover{background:var(--accent); color:#fff;}
 .agenda-item:last-child{border-bottom:none;}
 .agenda-time{font-family:'JetBrains Mono',monospace; font-size:11.5px; color:var(--ink-dim); width:46px; flex:none; padding-top:1px;}
 .agenda-type{
@@ -563,6 +569,7 @@ const DOW = ['일','월','화','수','목','금','토'];
 const state = {
   view: 'dashboard',
   customers: [],
+  sites: [],
   events: [],
   projects: [],
   calYear: null, calMonth: null, // 0-indexed month
@@ -621,11 +628,13 @@ function customerFromDb(r){
 }
 function eventToDb(e){
   return { id:e.id, title:e.title, type:e.type, customer_id:e.customerId||null, date:e.date,
-    start_time:e.start||null, end_time:e.end||null, location:e.location||null, memo:e.memo||null };
+    start_time:e.start||null, end_time:e.end||null, location:e.location||null, memo:e.memo||null,
+    site_id:e.siteId||null, status:e.status||'confirmed' };
 }
 function eventFromDb(r){
   return { id:r.id, title:r.title, type:r.type, customerId:r.customer_id||null, date:r.date,
-    start:r.start_time||'', end:r.end_time||'', location:r.location||'', memo:r.memo||'' };
+    start:r.start_time||'', end:r.end_time||'', location:r.location||'', memo:r.memo||'',
+    siteId:r.site_id||null, status:r.status||'confirmed' };
 }
 function projectToDb(p){
   return { id:p.id, customer_id:p.customerId||null, name:p.name, stage:p.stage, amount:p.amount||0, memo:p.memo||null };
@@ -660,10 +669,11 @@ async function save(){
 }
 async function load(){
   try{
-    const [r1, r2, r3] = await Promise.all([
+    const [r1, r2, r3, r4] = await Promise.all([
       sb.from('customers').select('*').order('created_at', {ascending:false}),
       sb.from('events').select('*'),
       sb.from('projects').select('*').order('created_at', {ascending:false}),
+      sb.from('sites').select('*').order('created_at', {ascending:false}),
     ]);
     if(r1.error || r2.error || r3.error){
       console.error('불러오기 실패', r1.error, r2.error, r3.error);
@@ -672,8 +682,13 @@ async function load(){
     state.customers = (r1.data||[]).map(customerFromDb);
     state.events = (r2.data||[]).map(eventFromDb);
     state.projects = (r3.data||[]).map(projectFromDb);
+    state.sites = r4.error ? [] : (r4.data||[]).map(siteFromDb);
     return true;
   }catch(e){ console.error(e); return false; }
+}
+function siteFromDb(r){
+  return { id:r.id, customerId:r.customer_id||null, contractId:r.contract_id||null,
+    name:r.name, address:r.address||'', color:r.color||'#8A5A2B', status:r.status||'진행중', createdAt:r.created_at };
 }
 function seedIfEmpty(){
   if(state.customers.length || state.events.length || state.projects.length) return;
@@ -859,6 +874,10 @@ function renderDashboard(){
   $main.querySelectorAll('[data-open-customer]').forEach(el=>{
     el.addEventListener('click', ()=> openCustomerDetail(el.dataset.openCustomer));
   });
+  $main.querySelectorAll('[data-open-event]').forEach(el=>{
+    el.addEventListener('click', (ev)=>{ ev.stopPropagation(); openEventModal(el.dataset.openEvent); });
+  });
+  bindConfirmEventButtons();
 }
 function statCard(label, value, sub){
   return '<div class="card stat-card"><div class="stat-label">'+label+'</div><div class="stat-value num">'+value+'</div>'+(sub?'<div class="stat-sub">'+sub+'</div>':'')+'</div>';
@@ -866,15 +885,20 @@ function statCard(label, value, sub){
 function agendaItemHTML(e){
   const ti = eventTypeInfo(e.type);
   const cust = e.customerId ? customerById(e.customerId) : null;
+  const site = e.siteId ? siteById(e.siteId) : null;
   return '<div class="agenda-item" data-open-event="'+e.id+'">'+
     '<div class="agenda-time num">'+(e.start||'')+'</div>'+
     '<span class="agenda-type tag-'+ti.tag+'" style="background:transparent;">'+
       '<span class="tag tag-'+ti.tag+'">'+ti.label+'</span>'+
     '</span>'+
-    '<div style="flex:1;"><div class="agenda-title">'+escapeHtml(e.title)+'</div>'+
+    (site? '<span class="site-dot" style="background:'+site.color+';" title="'+escapeHtml(site.name)+'"></span>' : '')+
+    '<div style="flex:1;"><div class="agenda-title">'+statusPrefix(e.status)+escapeHtml(e.title)+'</div>'+
     (cust? '<div class="agenda-cust">'+escapeHtml(cust.name)+'</div>':'')+'</div>'+
+    (e.status==='tentative'? '<button class="btn-confirm-event" data-confirm-event="'+e.id+'" title="확정">확정</button>' : '')+
   '</div>';
 }
+function siteById(id){ return state.sites.find(s=>s.id===id); }
+function statusPrefix(status){ return status==='tentative' ? '<span class="status-tag status-tentative">(예)</span> ' : '<span class="status-tag status-confirmed">(확)</span> '; }
 function addDaysISO(iso, n){
   const d = new Date(iso+'T00:00:00'); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10);
 }
@@ -912,7 +936,9 @@ function renderSchedule(){
     html += '<div class="cal-date">'+d.getDate()+'</div>';
     evts.slice(0,3).forEach(e=>{
       const ti = eventTypeInfo(e.type);
-      html += '<div class="cal-evt tag-'+ti.tag+'" data-open-event="'+e.id+'">'+(e.start?e.start+' ':'')+escapeHtml(e.title)+'</div>';
+      const site = e.siteId ? siteById(e.siteId) : null;
+      const borderStyle = site ? ' style="border-left:3px solid '+site.color+';"' : '';
+      html += '<div class="cal-evt tag-'+ti.tag+'"'+borderStyle+' data-open-event="'+e.id+'">'+(e.start?e.start+' ':'')+statusPrefix(e.status)+escapeHtml(e.title)+'</div>';
     });
     if(evts.length>3) html += '<div class="cal-more">+'+(evts.length-3)+'건 더보기</div>';
     html += '</div>';
@@ -941,6 +967,20 @@ function renderSchedule(){
   });
   $main.querySelectorAll('[data-open-event]').forEach(el=>{
     el.addEventListener('click', (ev)=>{ ev.stopPropagation(); openEventModal(el.dataset.openEvent); });
+  });
+  bindConfirmEventButtons();
+}
+function bindConfirmEventButtons(){
+  $main.querySelectorAll('[data-confirm-event]').forEach(el=>{
+    el.addEventListener('click', async (ev)=>{
+      ev.stopPropagation();
+      const id = el.dataset.confirmEvent;
+      const e = state.events.find(x=>x.id===id);
+      if(!e) return;
+      e.status = 'confirmed';
+      await sb.from('events').update({status:'confirmed'}).eq('id', id);
+      renderMain();
+    });
   });
 }
 
@@ -1165,6 +1205,7 @@ function openEventModal(id, prefillDate){
         '</div>'+
         '<div class="field"><label>장소</label><input type="text" id="f-location" value="'+escapeHtml(ev?ev.location||'':'')+'" placeholder="예: 전시장, 현장 주소"></div>'+
         '<div class="field"><label>메모</label><textarea id="f-memo">'+escapeHtml(ev?ev.memo||'':'')+'</textarea></div>'+
+        (ev&&ev.siteId ? '<div class="field"><label class="addr-radio" style="font-size:12.5px;"><input type="checkbox" id="f-confirmed" '+(ev.status==='confirmed'?'checked':'')+'> 이 일정 확정됨 (문자·통화로 확인 완료)</label></div>' : '')+
         '<div class="modal-actions">'+
           (ev? '<button class="btn btn-danger" id="btn-delete">삭제</button>':'')+
           '<button class="btn btn-primary" id="btn-save">'+(ev?'저장':'추가')+'</button>'+
@@ -1186,6 +1227,8 @@ function openEventModal(id, prefillDate){
       location: document.getElementById('f-location').value.trim(),
       memo: document.getElementById('f-memo').value.trim(),
     };
+    const confirmEl = document.getElementById('f-confirmed');
+    if(confirmEl) data.status = confirmEl.checked ? 'confirmed' : 'tentative';
     if(ev){ Object.assign(ev, data); } else { state.events.push(Object.assign({id:uid('e')}, data)); }
     save(); closeModal(); renderMain();
   });

@@ -197,6 +197,11 @@ async function submitSignature(){
     });
     if(signErr) throw signErr;
 
+    // 서명 완료 → 현장 및 기본 공정 일정 자동 생성 (실패해도 서명 자체는 이미 완료된 상태라 조용히 넘어감)
+    try{
+      await sb.rpc('create_site_and_schedule', { p_token: new URLSearchParams(window.location.search).get('token') });
+    }catch(siteErr){ console.error('현장/일정 자동 생성 실패', siteErr); }
+
     const pdfUrl = SUPABASE_URL+'/storage/v1/object/public/contracts/'+pdfPath;
     $app.innerHTML = '<div class="center-note success-box">'+
       '<div class="ico">✅</div><h2>서명이 완료됐어요</h2>'+
