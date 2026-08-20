@@ -2368,12 +2368,20 @@ async function moveCheckedItemsForCurrentView(toGroup){
 }
 function bindDragReorder(){
   let dragSrc = null;
-  $main.querySelectorAll('.admin-item-block[draggable="true"]').forEach(block=>{
+  $main.querySelectorAll('.admin-item-block').forEach(block=>{
+    const handle = block.querySelector('.drag-handle');
+    if(handle){
+      handle.addEventListener('mousedown', ()=>{ block.setAttribute('draggable','true'); });
+      handle.addEventListener('touchstart', ()=>{ block.setAttribute('draggable','true'); }, {passive:true});
+    }
     block.addEventListener('dragstart', ()=>{
       dragSrc = { group: block.dataset.group, i: parseInt(block.dataset.i,10) };
       block.classList.add('dragging');
     });
-    block.addEventListener('dragend', ()=>{ block.classList.remove('dragging'); });
+    block.addEventListener('dragend', ()=>{
+      block.classList.remove('dragging');
+      block.setAttribute('draggable','false'); // 다시 잠가서, 핸들이 아닌 곳에서는 드래그 안 되게
+    });
     block.addEventListener('dragover', e=>{ e.preventDefault(); block.classList.add('drag-over'); });
     block.addEventListener('dragleave', ()=>{ block.classList.remove('drag-over'); });
     block.addEventListener('drop', async e=>{
@@ -2472,7 +2480,7 @@ function adminItemBlockHTML(group, i){
     // 하위그룹이 1개뿐이면 한 줄로 압축 표시
     const v = variants[0];
     const price = computeVariantPrice(group, i, 0);
-    return '<div class="admin-item-block admin-item-compact" draggable="true" data-group="'+group+'" data-i="'+i+'">'+
+    return '<div class="admin-item-block admin-item-compact" draggable="false" data-group="'+group+'" data-i="'+i+'">'+
       '<div class="admin-item-row-compact">'+
         dragBits+
         '<input type="text" class="item-name-input compact" data-role="item-name-edit" data-group="'+group+'" data-i="'+i+'" value="'+escapeHtml(raw.n||'')+'" placeholder="품명">'+
@@ -2490,7 +2498,7 @@ function adminItemBlockHTML(group, i){
     '</div>';
   }
 
-  return '<div class="admin-item-block" draggable="true" data-group="'+group+'" data-i="'+i+'">'+
+  return '<div class="admin-item-block" draggable="false" data-group="'+group+'" data-i="'+i+'">'+
     '<div class="admin-item-head">'+
       dragBits+
       '<input type="text" class="item-name-input" data-role="item-name-edit" data-group="'+group+'" data-i="'+i+'" value="'+escapeHtml(raw.n||'')+'" placeholder="품명">'+
