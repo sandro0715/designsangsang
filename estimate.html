@@ -696,8 +696,10 @@ table.items tbody tr.has-qty:hover{background:#F8F0DC;}
 .wp-add-row input{flex:1; padding:8px 10px; border:1.3px solid var(--line-strong); border-radius:8px; font-size:13px;}
 .carpenter-box{background:var(--surface-2); border:1.3px dashed var(--line-strong); border-radius:10px; padding:16px; margin-top:16px;}
 .labor-top-item{background:var(--accent-soft); border:1.5px solid var(--accent); border-radius:10px; padding:14px 16px; margin-bottom:16px;}
-.labor-top-label{font-size:13px; font-weight:800; color:var(--accent-deep); margin-bottom:8px;}
-.labor-top-row{display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13px;}
+.labor-top-label{font-size:13px; font-weight:800; color:var(--accent-deep); margin-bottom:6px;}
+.labor-ref-line{font-size:11.5px; color:var(--ink-faint); margin-bottom:10px; padding-bottom:10px; border-bottom:1px dashed var(--line-strong);}
+.labor-top-row{display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13px; background:var(--surface); border-radius:8px; padding:8px 10px;}
+.labor-input-tag{font-size:10px; font-weight:800; color:#fff; background:var(--accent); padding:2px 7px; border-radius:5px; flex:none;}
 .labor-top-wage{color:var(--ink-dim);}
 .labor-top-amount{font-weight:800; font-size:15px; margin-left:auto;}
 .carpenter-box-title{font-size:12.5px; font-weight:800; margin-bottom:10px;}
@@ -2082,24 +2084,14 @@ function laborTopItemHTML(group){
   const wage = tradeDayWage(group);
   return ''+
   '<div class="labor-top-item">'+
-    '<div class="labor-top-label">'+tradeLabel(group)+' 인건비 (품수 입력)</div>'+
+    '<div class="labor-top-label">'+tradeLabel(group)+' 인건비</div>'+
+    '<div class="labor-ref-line" id="carpenter-ref-'+group+'">참고 · <span class="carpenter-auto">자동계산 '+auto.toFixed(2)+'품 (선택 항목 노무비 합계 ÷ 일당 '+won(wage)+'원)</span></div>'+
     '<div class="labor-top-row">'+
+      '<span class="labor-input-tag">실제 입력</span>'+
       '<input type="number" step="0.1" min="0" class="carpenter-days-input" id="carpenter-days-'+group+'" data-group="'+group+'" value="'+current+'"> 품'+
       '<span class="labor-top-wage">× 일당 '+won(wage)+'원</span>'+
       '<span class="labor-top-amount" id="labor-top-amount-'+group+'">= ₩ '+won(current*wage)+'</span>'+
     '</div>'+
-  '</div>';
-}
-function carpenterDaysBoxHTML(group){
-  const auto = carpenterAutoDays(group);
-  const wage = tradeDayWage(group);
-  return ''+
-  '<div class="carpenter-box" id="carpenter-ref-'+group+'">'+
-    '<div class="carpenter-box-title">'+tradeLabel(group)+' 품수 자동계산 참고</div>'+
-    '<div class="carpenter-box-row">'+
-      '<span class="carpenter-auto">자동계산 '+auto.toFixed(2)+'품 (선택 항목 노무비 합계 ÷ 일당 '+won(wage)+'원)</span>'+
-    '</div>'+
-    '<div class="carpenter-box-hint">위 참고값을 보고 상단 "인건비" 입력칸에 실제 협의된 품수를 입력해 주세요. 그 값 × 일당이 견적 금액에 그대로 반영돼요.</div>'+
   '</div>';
 }
 function refreshCarpenterDaysBox(group){
@@ -2145,7 +2137,6 @@ function quoteTableHTML(group){
     '<div class="cat-subtotal" id="subtotal-'+group+'">소계 <b>'+won(groupSum(group))+'</b> 원</div>';
   }
   if(group === "3") out += windowCalcBoxHTML(group);
-  if(isCarpenterDirectGroup(group)) out += carpenterDaysBoxHTML(group); // 자동계산 참고문구 - 하단
   out += ''+
   '<div class="custom-add">'+
     '<div class="custom-add-title">목록에 없는 항목 직접 추가</div>'+
