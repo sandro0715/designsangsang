@@ -1267,7 +1267,7 @@ function carpenterAutoDays(group){
 function carpenterEffectiveDays(group){
   const ov = state.carpenterDaysOverride[group];
   if(ov !== undefined && ov !== null && ov !== '') return Number(ov);
-  return carpenterAutoDays(group);
+  return Math.ceil(carpenterAutoDays(group)); // 아직 직접 입력 안 했으면 자동계산값도 올림해서 사용
 }
 function isCarpenterDirectGroup(group){
   return !!TRADE_DAY_GROUPS[group] && state.meta.quoteType === 'direct';
