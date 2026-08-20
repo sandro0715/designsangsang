@@ -700,7 +700,7 @@ table.items tbody tr.has-qty:hover{background:#F8F0DC;}
 
 .window-calc-box{background:var(--surface-2); border:1.3px dashed var(--line-strong); border-radius:10px; padding:16px; margin-top:16px;}
 .sash-box{background:var(--accent-soft); border:1.3px solid var(--accent);}
-.sash-grid{grid-template-columns:1.2fr .8fr .8fr .8fr 1.2fr 1.2fr auto !important;}
+.sash-grid{grid-template-columns:1fr 1.2fr .8fr .8fr .8fr 1.2fr 1.2fr auto !important;}
 .window-calc-title{font-size:12.5px; font-weight:800; margin-bottom:10px;}
 .window-calc-grid{display:grid; grid-template-columns:1.3fr 1fr 1fr 1fr 1fr 1fr auto; gap:8px; align-items:center;}
 .window-calc-grid select, .window-calc-grid input{padding:8px 9px; border:1.3px solid var(--line-strong); border-radius:7px; font-size:12.5px;}
@@ -1241,12 +1241,13 @@ function addWindowCustomItem(group, position, widthMm, heightMm, unitPrice){
   state.custom[group] = list;
   renderAll();
 }
-function addSashCustomItem(group, windowType, widthMm, heightMm, glassSpec, amount){
+function addSashCustomItem(group, position, windowType, widthMm, heightMm, glassSpec, amount){
   if(!windowType || !widthMm || !heightMm || !amount) return;
   const jp = calcJaPyeong(widthMm, heightMm);
   const list = getCustomList(group).slice();
+  const name = position ? position+' '+windowType : windowType;
   const spec = widthMm+'×'+heightMm+'mm'+(glassSpec?' · '+glassSpec:'')+' (자평 '+jp.toFixed(2)+')';
-  list.push({id:"c"+(customSeq++), n:windowType, s:spec, u:'식', p:Number(amount)||0, q:1, opt:false});
+  list.push({id:"c"+(customSeq++), n:name, s:spec, u:'식', p:Number(amount)||0, q:1, opt:false});
   state.custom[group] = list;
   renderAll();
 }
@@ -2169,6 +2170,7 @@ function windowCalcBoxHTML(group){
   '<div class="window-calc-box sash-box">'+
     '<div class="window-calc-title">샷시(창) 항목 추가</div>'+
     '<div class="window-calc-grid sash-grid">'+
+      '<select id="sash-position">'+ '<option value="">위치 선택</option>' + posOptions + '</select>'+
       '<select id="sash-type">'+ '<option value="">창 종류 선택</option>' + typeOptions + '</select>'+
       '<input type="number" id="sash-width" placeholder="가로(mm)">'+
       '<input type="number" id="sash-height" placeholder="세로(mm)">'+
@@ -2177,7 +2179,7 @@ function windowCalcBoxHTML(group){
       '<input type="text" inputmode="numeric" class="money-input" id="sash-amount" placeholder="금액 (제작+유리+시공 합계)">'+
       '<button class="btn-add" id="sash-add-btn" data-group="'+group+'">추가</button>'+
     '</div>'+
-    '<div class="window-calc-hint">거래처 견적서에 나온 최종 금액(제작+유리+시공 합계)을 그대로 입력하세요. 창종류·유리사양 목록은 "설정 → 견적관리설정"에서 관리해요.</div>'+
+    '<div class="window-calc-hint">거래처 견적서에 나온 최종 금액(제작+유리+시공 합계)을 그대로 입력하세요. 위치·창종류·유리사양 목록은 "설정 → 견적관리설정"에서 관리해요.</div>'+
   '</div>'+
   '<div class="window-calc-box">'+
     '<div class="window-calc-title">기타 창호 항목 추가 (사이즈로 계산)</div>'+
@@ -2887,6 +2889,7 @@ function bindMainEvents(){
         addWindowCustomItem(group, winPos.value, winW.value, winH.value, parseCommaNum(winP.value));
       });
     }
+    const sashPos = document.getElementById('sash-position');
     const sashType = document.getElementById('sash-type');
     const sashW = document.getElementById('sash-width');
     const sashH = document.getElementById('sash-height');
@@ -2905,8 +2908,8 @@ function bindMainEvents(){
         if(!sashType.value){ alert('창 종류를 선택해 주세요.'); return; }
         if(!sashW.value || !sashH.value){ alert('가로/세로 사이즈를 입력해 주세요.'); return; }
         if(!sashAmt.value){ alert('금액을 입력해 주세요.'); return; }
-        addSashCustomItem(group, sashType.value, sashW.value, sashH.value, sashGlass.value, parseCommaNum(sashAmt.value));
-        sashW.value=''; sashH.value=''; sashAmt.value=''; sashType.value=''; sashGlass.value='';
+        addSashCustomItem(group, sashPos.value, sashType.value, sashW.value, sashH.value, sashGlass.value, parseCommaNum(sashAmt.value));
+        sashW.value=''; sashH.value=''; sashAmt.value=''; sashType.value=''; sashGlass.value=''; sashPos.value='';
         updateSashPreview();
       });
     }
