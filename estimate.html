@@ -663,6 +663,8 @@ tr.qadjust-row{background:var(--accent-soft);}
 .ct-link-box{margin-top:18px; background:var(--surface-2); border:1.3px dashed var(--line-strong); border-radius:10px; padding:16px;}
 .ct-link-label{font-size:12px; font-weight:700; color:var(--ink-dim); margin-bottom:8px;}
 .ct-link-row{display:flex; gap:8px;}
+.ct-manual-confirm-row{margin-top:14px; padding-top:14px; border-top:1px dashed var(--line-strong);}
+.ct-manual-hint{display:block; font-size:11.5px; color:var(--ink-faint); margin-bottom:8px; line-height:1.5;}
 .ct-link-row input{flex:1; padding:9px 10px; border:1.3px solid var(--line-strong); border-radius:8px; font-size:12.5px; background:var(--surface);}
 
 </style>
@@ -2052,7 +2054,7 @@ function renderContractForm(){
       payment_terms: document.getElementById('ct-payment').value.trim(),
       special_terms: document.getElementById('ct-special').value.trim(),
     };
-    const { data: inserted, error } = await sb.from('contracts').insert(row).select('token').single();
+    const { data: inserted, error } = await sb.from('contracts').insert(row).select('id, token').single();
     btn.disabled = false; btn.textContent = '계약서 링크 생성';
     if(error){ alert('계약서 생성에 실패했어요: '+error.message); return; }
     const link = window.location.origin + '/contract-sign.html?token=' + inserted.token;
@@ -2060,6 +2062,10 @@ function renderContractForm(){
       '<div class="ct-link-box">'+
         '<div class="ct-link-label">고객에게 이 링크를 보내주세요 (문자·카카오톡 등)</div>'+
         '<div class="ct-link-row"><input type="text" readonly value="'+escapeHtml(link)+'" id="ct-link-input"><button class="btn-secondary" id="ct-copy-btn" style="flex:none;">복사</button></div>'+
+        '<div class="ct-manual-confirm-row">'+
+          '<span class="ct-manual-hint">종이 계약서에 직접 서명받으셨거나 전화로 확정된 경우, 전자서명 없이 바로 확정할 수 있어요.</span>'+
+          '<button class="btn-secondary" id="ct-manual-confirm-btn" data-id="'+inserted.id+'" data-token="'+inserted.token+'">전자서명 없이 계약 확정</button>'+
+        '</div>'+
       '</div>';
     document.getElementById('ct-copy-btn').addEventListener('click', ()=>{
       const input = document.getElementById('ct-link-input');
@@ -2067,6 +2073,20 @@ function renderContractForm(){
       navigator.clipboard.writeText(input.value).then(()=>{
         const b = document.getElementById('ct-copy-btn'); b.textContent='복사됨 ✓'; setTimeout(()=>{b.textContent='복사';},1500);
       });
+    });
+    document.getElementById('ct-manual-confirm-btn').addEventListener('click', async (e)=>{
+      if(!confirm('전자서명 없이 이 계약을 바로 확정할까요? 현장과 기본 공정 일정이 자동으로 생성돼요.')) return;
+      const btn2 = e.target;
+      btn2.disabled = true; btn2.textContent = '확정 중…';
+      const { data: { user } } = await sb.auth.getUser();
+      const { error: updErr } = await sb.from('contracts').update({
+        status: 'signed', signed_at: new Date().toISOString(), signer_name: '(관리자 직접 확정)',
+      }).eq('id', btn2.dataset.id);
+      if(updErr){ alert('확정 실패: '+updErr.message); btn2.disabled=false; btn2.textContent='전자서명 없이 계약 확정'; return; }
+      const { error: rpcErr } = await sb.rpc('create_site_and_schedule', { p_token: btn2.dataset.token });
+      if(rpcErr){ alert('현장/일정 생성 실패: '+rpcErr.message); btn2.disabled=false; btn2.textContent='전자서명 없이 계약 확정'; return; }
+      btn2.textContent = '✓ 확정 완료 (현장·일정 생성됨)';
+      btn2.disabled = true;
     });
   });
 }
