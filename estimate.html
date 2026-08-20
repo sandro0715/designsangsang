@@ -477,6 +477,9 @@ table.items tbody tr.has-qty:hover{background:#F8F0DC;}
 .product-add-box{background:var(--surface-2); border:1.3px solid var(--line-strong); border-radius:10px; padding:16px; margin:16px 0;}
 .product-form-grid{display:grid; grid-template-columns:1.1fr 1.1fr 1.4fr .9fr .7fr .9fr .9fr .9fr 1.2fr auto; gap:8px; align-items:center; margin-top:10px;}
 .product-form-grid select, .product-form-grid input[type="text"]{padding:8px 9px; border:1.3px solid var(--line-strong); border-radius:7px; font-size:12.5px;}
+.labeled-money-input{position:relative;}
+.labeled-money-input .money-input{width:100%; padding:15px 9px 5px !important; border:1.3px solid var(--line-strong); border-radius:7px; font-size:12.5px;}
+.lmi-label{position:absolute; top:4px; left:9px; font-size:9px; color:var(--ink-faint); font-weight:700; pointer-events:none; letter-spacing:.02em;}
 .product-form-grid input[type="file"]{font-size:11px;}
 .product-filter-row{margin:14px 0 10px;}
 .product-filter-row select{padding:8px 10px; border:1.3px solid var(--line-strong); border-radius:8px; font-size:12.5px;}
@@ -1351,6 +1354,12 @@ function productPhotoUrl(path){
 function groupOptionsForCid(cid){
   return (CAT_GROUPS[cid]||[]).map(g=>({group:g, label: CATALOG[g] ? CATALOG[g].label : g}));
 }
+function labeledMoneyInput(id, label, value){
+  return '<div class="labeled-money-input">'+
+    '<span class="lmi-label">'+label+'</span>'+
+    '<input type="text" inputmode="numeric" class="money-input" id="'+id+'" value="'+(value!==undefined?fmtNum(value):'')+'">'+
+  '</div>';
+}
 async function renderProductCatalog(){
   let body = '<div class="cat-head"><div class="eyebrow">설정</div><h2>제품 카탈로그</h2></div>';
   body += '<div class="margin-box"><div class="config-desc">타일·욕실·필름·도배·바닥재·조명·주방·가구 등, 실제 시공에 쓰는 구체적인 제품을 사진·가격과 함께 등록해두세요. 견적 작성 화면에서 "제품 선택" 드롭다운으로 바로 불러올 수 있어요.</div></div>';
@@ -1362,9 +1371,9 @@ async function renderProductCatalog(){
       '<input type="text" id="pf-name" placeholder="제품명 (예: 동화 강마루 A타입)">'+
       '<input type="text" id="pf-spec" placeholder="규격 (선택)">'+
       '<input type="text" id="pf-unit" placeholder="단위 (예: ㎡, 장, 식)" value="식">'+
-      '<input type="text" inputmode="numeric" class="money-input" id="pf-material" placeholder="재료비">'+
-      '<input type="text" inputmode="numeric" class="money-input" id="pf-labor" placeholder="노무비">'+
-      '<input type="text" inputmode="numeric" class="money-input" id="pf-expense" placeholder="경비">'+
+      labeledMoneyInput('pf-material','재료비')+
+      labeledMoneyInput('pf-labor','노무비')+
+      labeledMoneyInput('pf-expense','경비')+
       '<input type="file" id="pf-photo" accept="image/*">'+
       '<button class="btn-primary" id="pf-add-btn" style="flex:none;">등록</button>'+
     '</div>'+
@@ -1494,9 +1503,9 @@ function productEditCardHTML(p){
       '<input type="text" id="pe-name" value="'+escapeHtml(p.name)+'" placeholder="제품명">'+
       '<input type="text" id="pe-spec" value="'+escapeHtml(p.spec||'')+'" placeholder="규격">'+
       '<input type="text" id="pe-unit" value="'+escapeHtml(p.unit||'식')+'" placeholder="단위">'+
-      '<input type="text" inputmode="numeric" class="money-input" id="pe-material" value="'+fmtNum(p.material_cost||0)+'" placeholder="재료비">'+
-      '<input type="text" inputmode="numeric" class="money-input" id="pe-labor" value="'+fmtNum(p.labor_cost||0)+'" placeholder="노무비">'+
-      '<input type="text" inputmode="numeric" class="money-input" id="pe-expense" value="'+fmtNum(p.expense_cost||0)+'" placeholder="경비">'+
+      labeledMoneyInput('pe-material','재료비',p.material_cost||0)+
+      labeledMoneyInput('pe-labor','노무비',p.labor_cost||0)+
+      labeledMoneyInput('pe-expense','경비',p.expense_cost||0)+
       '<input type="file" id="pe-photo" accept="image/*">'+
       '<div class="product-edit-actions">'+
         '<button class="btn-primary" id="pe-save-btn" data-id="'+p.id+'">저장</button>'+
