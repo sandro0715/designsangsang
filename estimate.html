@@ -620,6 +620,9 @@ table.items tbody tr.has-qty:hover{background:#F8F0DC;}
   .p-totals td{padding:5px 8px; font-size:11.5px; border-bottom:1px solid #ddd;}
   .p-totals tr.final td{font-weight:800; font-size:14px; border-top:2px solid #222; border-bottom:none;}
   .p-note{margin-top:18px; font-size:10px; color:#777; line-height:1.6;}
+  .p-option-title{margin-top:22px; font-size:11px; font-weight:800; color:#3E5C6B; border-top:1.5px dashed #999; padding-top:14px;}
+  .p-option-table{margin-top:8px; font-size:10.5px; opacity:.9;}
+  .p-option-table th{color:#3E5C6B;}
 }
 
 /* ===== Responsive ===== */
@@ -3292,6 +3295,7 @@ function buildPrintView(){
   const t = computeTotals();
   const today = new Date().toLocaleDateString('ko-KR');
   let rows = '';
+  let optionRows = '';
   CAT_ORDER.forEach(cid=>{
     const meta = CAT_META[cid];
     let catRows = '';
@@ -3302,16 +3306,22 @@ function buildPrintView(){
           const it = effItemQ(group,i);
           const parts = rowPriceParts(group,i);
           const price = parts.mat+parts.labor+parts.exp;
-          catRows += '<tr><td>'+escapeHtml(it.n)+(it.s?' <span style="color:#888">('+escapeHtml(it.s)+')</span>':'')+(st.opt?' <b style="color:#3E5C6B">[옵션]</b>':'')+'</td><td>'+escapeHtml(it.u)+'</td>'+
+          const amt = lineAmt(price,st.q);
+          const rowHtml = '<tr><td>'+escapeHtml(it.n)+(it.s?' <span style="color:#888">('+escapeHtml(it.s)+')</span>':'')+'</td><td>'+escapeHtml(it.u)+'</td>'+
             '<td class="p-right">'+(parts.mat>0?won(parts.mat):'-')+'</td><td class="p-right">'+(parts.labor>0?won(parts.labor):'-')+'</td><td class="p-right">'+(parts.exp>0?won(parts.exp):'-')+'</td>'+
-            '<td class="p-right">'+st.q+'</td><td class="p-right">'+won(lineAmt(price,st.q))+'</td></tr>';
+            '<td class="p-right">'+st.q+'</td><td class="p-right">'+won(amt)+'</td></tr>';
+          if(st.opt) optionRows += '<tr><td>'+meta.no+'. '+meta.title+' — '+escapeHtml(it.n)+(it.s?' ('+escapeHtml(it.s)+')':'')+'</td><td>'+escapeHtml(it.u)+'</td><td class="p-right">'+st.q+'</td><td class="p-right">'+won(amt)+'</td></tr>';
+          else catRows += rowHtml;
         }
       });
       getCustomList(group).forEach(it=>{
         if(it.q>0){
-          catRows += '<tr><td>'+escapeHtml(it.n)+(it.s?' <span style="color:#888">('+escapeHtml(it.s)+')</span>':'')+(it.opt?' <b style="color:#3E5C6B">[옵션]</b>':'')+'</td><td>'+escapeHtml(it.u)+'</td>'+
+          const amt = lineAmt(it.p,it.q);
+          const rowHtml = '<tr><td>'+escapeHtml(it.n)+(it.s?' <span style="color:#888">('+escapeHtml(it.s)+')</span>':'')+'</td><td>'+escapeHtml(it.u)+'</td>'+
             '<td class="p-right">'+won(it.p)+'</td><td class="p-right">-</td><td class="p-right">-</td>'+
-            '<td class="p-right">'+it.q+'</td><td class="p-right">'+won(lineAmt(it.p,it.q))+'</td></tr>';
+            '<td class="p-right">'+it.q+'</td><td class="p-right">'+won(amt)+'</td></tr>';
+          if(it.opt) optionRows += '<tr><td>'+meta.no+'. '+meta.title+' — '+escapeHtml(it.n)+(it.s?' ('+escapeHtml(it.s)+')':'')+'</td><td>'+escapeHtml(it.u)+'</td><td class="p-right">'+it.q+'</td><td class="p-right">'+won(amt)+'</td></tr>';
+          else catRows += rowHtml;
         }
       });
       if(isCarpenterDirectGroup(group)){
@@ -3350,6 +3360,10 @@ function buildPrintView(){
       '<tr><td>'+(t.isDirect ? '부가가치세'+(((t.vatOnFee?1:0)+(t.itemVat>0?1:0))>1 ? ' (수수료+항목별)' : (t.vatOnFee?' (수수료 10%)':(t.itemVat>0?' (항목별)':' (미포함)'))) : '부가가치세 (10%)')+'</td><td class="p-right">'+won(t.vat)+' 원</td></tr>'+
       '<tr class="final"><td>총 계</td><td class="p-right">'+won(t.grand)+' 원</td></tr>'+
     '</tbody></table>'+
+    (optionRows ? ''+
+      '<div class="p-option-title">옵션 항목 (참고용 — 위 견적 금액에는 포함되지 않았습니다)</div>'+
+      '<table class="p-table p-option-table"><thead><tr><th>공종 · 품명 / 규격</th><th>단위</th><th class="p-right">수량</th><th class="p-right">참고 금액</th></tr></thead><tbody>'+optionRows+'</tbody></table>'+
+    '' : '')+
     '<div class="p-note">'+
       '* 본 견적서는 V.A.T 포함 견적서이며, 발행일로부터 2주간 유효합니다.<br>* 상기 기재된 내용은 참고 단가 기준의 가견적이며, 현장 실측 및 자재·시공 방법 변경에 따라 조정될 수 있습니다.<br>* 입금계좌 : IBK기업은행 119-248205-04-016 (예금주 : 이윤정)</div>';
   document.getElementById('printArea').innerHTML = html;
