@@ -1205,11 +1205,14 @@ function setQty(group, i, patch){
 function getCustomList(group){
   return state.custom[group] || [];
 }
-function addCustom(group, n, s, u, p, opt, sourceIndex, variantIdx){
+function addCustom(group, n, s, u, p, opt, sourceIndex, variantIdx, parts){
   if(!n || !p) return;
   const list = getCustomList(group).slice();
   const item = {id:"c"+(customSeq++), n:n, s:s||'', u:u||'식', p:Number(p)||0, q:1, opt:!!opt};
-  if(sourceIndex !== undefined){ item.sourceIndex = sourceIndex; item.variantIdx = variantIdx; }
+  if(sourceIndex !== undefined){
+    item.sourceIndex = sourceIndex; item.variantIdx = variantIdx;
+    if(parts){ item.mat = parts.mat; item.labor = parts.labor; item.exp = parts.exp; }
+  }
   list.push(item);
   state.custom[group] = list;
   renderAll();
@@ -2034,13 +2037,23 @@ function variantUnitPrice(group, i, vi){
   if(it.exp !== undefined && it.exp !== null) total += roundUp(it.exp * (1+m), it.ep);
   return Math.round(total);
 }
+function variantPriceParts(group, i, vi){
+  const it = effItem(group, i, vi);
+  const isDirect = state.meta.quoteType === 'direct';
+  const m = (it.mo !== undefined && it.mo !== null) ? it.mo : (isDirect ? 0 : categoryMargin(group));
+  const mat = (it.mat !== undefined && it.mat !== null) ? roundUp(it.mat * (1+m), it.mp) : 0;
+  const labor = (it.labor !== undefined && it.labor !== null) ? roundUp(it.labor * (1+m), it.lp) : 0;
+  const exp = (it.exp !== undefined && it.exp !== null) ? roundUp(it.exp * (1+m), it.ep) : 0;
+  return { mat, labor, exp };
+}
 function copyItemAsCustom(group, i){
   const rawItem = CATALOG[group].items[i];
   const variants = itemVariants(rawItem);
   const curVi = (state.selectedVariant && state.selectedVariant[group+"|"+i] !== undefined) ? state.selectedVariant[group+"|"+i] : itemDefaultVariantIdx(rawItem);
   const v = variants[curVi] || variants[0];
   const price = variantUnitPrice(group, i, curVi);
-  addCustom(group, rawItem.n, v.label||'', v.u||'식', price, false, i, curVi);
+  const parts = variantPriceParts(group, i, curVi);
+  addCustom(group, rawItem.n, v.label||'', v.u||'식', price, false, i, curVi, parts);
 }
 function itemRowHTML(group, i){
   const it = effItemQ(group, i);
@@ -2085,7 +2098,8 @@ function itemRowHTML(group, i){
 function customRowHTML(group, it){
   const amt = lineAmt(it.p, it.q);
   let specCell = it.s ? '<div class="item-spec">'+escapeHtml(it.s)+'</div>' : '';
-  if(it.sourceIndex !== undefined && CATALOG[group] && CATALOG[group].items[it.sourceIndex]){
+  const isCopy = it.sourceIndex !== undefined;
+  if(isCopy && CATALOG[group] && CATALOG[group].items[it.sourceIndex]){
     const variants = itemVariants(CATALOG[group].items[it.sourceIndex]);
     if(variants.length > 1){
       specCell = '<select class="variant-pick-select" data-role="custom-variant-pick" data-group="'+group+'" data-id="'+it.id+'" data-source-i="'+it.sourceIndex+'">'+
@@ -2093,14 +2107,15 @@ function customRowHTML(group, it){
       '</select>';
     }
   }
+  const costCells = isCopy
+    ? '<td class="col-cost num">'+(it.mat>0?won(it.mat):'')+'</td><td class="col-cost num">'+(it.labor>0?won(it.labor):'')+'</td><td class="col-cost num">'+(it.exp>0?won(it.exp):'')+'</td>'
+    : '<td class="col-cost num">'+won(it.p)+'</td><td class="col-cost num"></td><td class="col-cost num"></td>';
   return ''+
   '<tr class="custom-row '+(it.q>0?'has-qty':'')+'">'+
     '<td class="col-idx num">＋</td>'+
-    '<td class="col-name"><div class="item-name">'+escapeHtml(it.n)+' <span style="color:var(--accent);font-size:10.5px;font-weight:700;">직접입력</span></div>'+specCell+'</td>'+
+    '<td class="col-name"><div class="item-name">'+escapeHtml(it.n)+(isCopy?'':' <span style="color:var(--accent);font-size:10.5px;font-weight:700;">직접입력</span>')+'</div>'+specCell+'</td>'+
     '<td class="col-unit">'+escapeHtml(it.u)+'</td>'+
-    '<td class="col-cost num">'+won(it.p)+'</td>'+
-    '<td class="col-cost num"></td>'+
-    '<td class="col-cost num"></td>'+
+    costCells+
     '<td class="col-opt"><input type="checkbox" class="opt-check" '+(it.opt?'checked':'')+' data-role="c-opt" data-group="'+group+'" data-id="'+it.id+'"></td>'+
     '<td class="col-qty"><input type="number" min="0" step="1" class="qty-input num" value="'+(it.q||'')+'" data-role="c-qty" data-group="'+group+'" data-id="'+it.id+'" onfocus="this.select()"></td>'+
     '<td class="col-amt num"><span class="amt-text">'+(it.q>0? won(amt):'')+'</span> <button class="btn-remove" data-role="c-del" data-group="'+group+'" data-id="'+it.id+'" title="삭제">×</button></td>'+
@@ -2754,7 +2769,8 @@ function bindMainEvents(){
         const rawItem = CATALOG[group].items[sourceI];
         const v = itemVariants(rawItem)[vi];
         const price = variantUnitPrice(group, sourceI, vi);
-        updateCustom(group, e.target.dataset.id, {s:v.label||'', u:v.u||'식', p:price, variantIdx:vi});
+        const parts = variantPriceParts(group, sourceI, vi);
+        updateCustom(group, e.target.dataset.id, {s:v.label||'', u:v.u||'식', p:price, variantIdx:vi, mat:parts.mat, labor:parts.labor, exp:parts.exp});
         saveDraft();
         renderMain();
       });
