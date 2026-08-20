@@ -100,6 +100,10 @@ input,select,textarea{font-family:inherit;}
 .est-hub-cust-sub{font-size:12px; color:var(--ink-faint); margin-top:2px;}
 .est-hub-quotes{margin-top:10px; padding-top:10px; border-top:1px dashed var(--line); display:flex; flex-direction:column; gap:4px;}
 .est-hub-quote-row{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:7px 8px; border-radius:6px; cursor:pointer; font-size:12.5px;}
+.ct-hub-list{display:flex; flex-direction:column; gap:8px; margin-top:16px;}
+.ct-hub-row{display:flex; align-items:center; justify-content:space-between; gap:12px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:12px 16px;}
+.ct-hub-name{font-size:13.5px; font-weight:700;}
+.ct-hub-meta{font-size:11px; color:var(--ink-faint); margin-top:3px;}
 .est-hub-quote-row:hover{background:var(--surface-2);}
 .est-hub-quote-name{font-weight:700; color:var(--ink);}
 .est-hub-quote-meta{color:var(--ink-faint);}
@@ -185,6 +189,8 @@ input,select,textarea{font-family:inherit;}
 .tag-3{background:var(--s3-soft); color:var(--s3);}
 .tag-4{background:var(--s4-soft); color:var(--s4);}
 .tag-5{background:var(--s5-soft); color:var(--s5);}
+.tag-signed{background:#3E6B5C; color:#fff;}
+.tag-pending{background:var(--surface-2); color:var(--ink-faint); border:1px solid var(--line-strong);}
 
 /* ===== Calendar ===== */
 .cal-head{display:flex; align-items:center; gap:12px; margin-bottom:14px;}
@@ -581,6 +587,7 @@ const state = {
   custFilter: { q:'', status:'' },
   drag: null,
   estimateQuery: '', // 견적 계산기 탭으로 넘어갈 때 붙일 쿼리스트링 (고객 연결용)
+  estimateSection: null, // '견적/계약관리' 하위 화면: null(허브)/'quotes'/'contracts'/'archive'
   settingsSection: null, // 설정 탭 안에서 어느 세부 설정을 보고 있는지
 };
 
@@ -747,7 +754,7 @@ const NAV_ITEMS = [
   {id:'dashboard', no:'1', label:'대시보드'},
   {id:'schedule',  no:'2', label:'일정 관리'},
   {id:'customers', no:'3', label:'고객 관리'},
-  {id:'estimate',  no:'4', label:'견적 관리'},
+  {id:'estimate',  no:'4', label:'견적/계약관리'},
   {id:'kitchen',   no:'5', label:'주방 견적'},
   {id:'tile',      no:'6', label:'타일 수량'},
   {id:'projects',  no:'7', label:'프로젝트 현황'},
@@ -763,7 +770,7 @@ function renderNav(){
   $sidenav.querySelectorAll('[data-nav]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       state.view = btn.dataset.nav;
-      if(btn.dataset.nav==='estimate') state.estimateQuery='';
+      if(btn.dataset.nav==='estimate'){ state.estimateQuery=''; state.estimateSection=null; }
       if(btn.dataset.nav==='settings') state.settingsSection=null;
       renderMain(); renderNav();
     });
@@ -777,7 +784,10 @@ function renderMain(){
   if(state.view==='customers') return renderCustomers();
   if(state.view==='estimate'){
     if(state.estimateQuery) return renderToolFrame('estimate.html'+state.estimateQuery,'견적 관리', true);
-    return renderEstimateHub();
+    if(!state.estimateSection) return renderEstimateContractHub();
+    if(state.estimateSection==='quotes') return renderEstimateHub();
+    if(state.estimateSection==='contracts') return renderContractsHub();
+    if(state.estimateSection==='archive') return renderQuoteArchive();
   }
   if(state.view==='kitchen') return renderToolFrame('kitchen.html','주방 견적 계산기');
   if(state.view==='tile') return renderToolFrame('tile.html','타일 수량 산출');
@@ -1080,11 +1090,41 @@ function renderToolFrame(src, title, withBack){
   if(backBtn) backBtn.addEventListener('click', ()=>{ state.estimateQuery=''; renderMain(); });
 }
 
+/* ============ 견적/계약관리 허브 (3분류) ============ */
+function renderEstimateContractHub(){
+  let html = '<div class="page-head"><div><h1>견적/계약관리</h1><div class="desc">견적서와 계약서를 한 곳에서 관리해요.</div></div></div>';
+  html += '<div class="settings-grid">';
+  const cards = [
+    {id:'quotes', icon:'💰', title:'견적관리', desc:'고객별로 저장된 견적을 확인하고, 새 견적을 작성해요.'},
+    {id:'contracts', icon:'📝', title:'계약관리', desc:'전체 고객의 계약서 현황(대기중·서명완료)을 한눈에 확인해요.'},
+    {id:'archive', icon:'🗄️', title:'견적 보관함', desc:'더 이상 안 쓰는 견적을 목록에서 빼서 여기 모아둬요. 필요하면 다시 꺼낼 수 있어요.'},
+  ];
+  cards.forEach(c=>{
+    html += '<button class="settings-card" data-est-section="'+c.id+'">'+
+      '<div class="settings-card-ico">'+c.icon+'</div>'+
+      '<div class="settings-card-title">'+c.title+'</div>'+
+      '<div class="settings-card-desc">'+c.desc+'</div>'+
+    '</button>';
+  });
+  html += '</div>';
+  $main.innerHTML = html;
+  $main.querySelectorAll('[data-est-section]').forEach(el=>{
+    el.addEventListener('click', ()=>{ state.estimateSection = el.dataset.estSection; renderMain(); });
+  });
+}
+function estHubBackBtn(){
+  return '<button class="btn btn-ghost btn-sm" data-role="est-hub-back" style="margin-bottom:14px;">← 견적/계약관리로</button>';
+}
+function bindEstHubBack(){
+  const btn = document.querySelector('[data-role="est-hub-back"]');
+  if(btn) btn.addEventListener('click', ()=>{ state.estimateSection = null; renderMain(); });
+}
+
 /* ============ 견적 관리 허브: 고객별 견적 목록 ============ */
 async function renderEstimateHub(){
-  $main.innerHTML = '<div class="page-head"><div><h1>견적 관리</h1><div class="desc">고객별로 저장된 견적을 확인하고, 새 견적을 작성해요.</div></div></div>'+
+  $main.innerHTML = estHubBackBtn()+'<div class="page-head"><div><h1>견적관리</h1><div class="desc">고객별로 저장된 견적을 확인하고, 새 견적을 작성해요.</div></div></div>'+
     '<div class="loading-note">불러오는 중…</div>';
-  const { data, error } = await sb.from('quotes').select('id, customer_id, label, total, created_at').order('created_at', {ascending:false});
+  const { data, error } = await sb.from('quotes').select('id, customer_id, label, total, created_at').eq('is_archived', false).order('created_at', {ascending:false});
   if(state.view !== 'estimate') return; // 그 사이 다른 탭으로 이동한 경우
   const quotesByCustomer = {};
   const orphanQuotes = [];
@@ -1093,7 +1133,7 @@ async function renderEstimateHub(){
     else { orphanQuotes.push(q); }
   });
 
-  let html = '<div class="page-head"><div><h1>견적 관리</h1><div class="desc">고객별로 저장된 견적을 확인하고, 새 견적을 작성해요.</div></div></div>';
+  let html = estHubBackBtn()+'<div class="page-head"><div><h1>견적관리</h1><div class="desc">고객별로 저장된 견적을 확인하고, 새 견적을 작성해요.</div></div></div>';
   html += '<input type="text" id="est-hub-search" class="cust-search" placeholder="고객명으로 검색">';
   html += '<div id="est-hub-list" class="est-hub-list"></div>';
   if(orphanQuotes.length){
@@ -1101,6 +1141,7 @@ async function renderEstimateHub(){
     html += '<div class="est-hub-list">'+orphanQuotes.map(q=>estHubQuoteRowHTML(q)).join('')+'</div>';
   }
   $main.innerHTML = html;
+  bindEstHubBack();
 
   function renderList(filterQ){
     const box = document.getElementById('est-hub-list');
@@ -1127,6 +1168,14 @@ async function renderEstimateHub(){
         if(c) goToEstimateForCustomer(c, el.dataset.qid);
       });
     });
+    box.querySelectorAll('[data-role="archive-quote"]').forEach(el=>{
+      el.addEventListener('click', async (ev)=>{
+        ev.stopPropagation();
+        if(!confirm('이 견적을 보관함으로 옮길까요? 목록에서만 안 보이고, "견적 보관함"에서 다시 꺼낼 수 있어요.')) return;
+        await sb.from('quotes').update({is_archived:true}).eq('id', el.dataset.qid);
+        renderMain();
+      });
+    });
   }
   renderList('');
   document.getElementById('est-hub-search').addEventListener('input', e=> renderList(e.target.value.trim()));
@@ -1136,7 +1185,74 @@ function estHubQuoteRowHTML(q){
   return '<div class="est-hub-quote-row" data-role="open-quote" data-qid="'+q.id+'" data-cid="'+(q.customer_id||'')+'">'+
     '<span class="est-hub-quote-name">'+escapeHtml(q.label)+'</span>'+
     '<span class="est-hub-quote-meta">'+d+' · ₩ '+won(q.total||0)+'</span>'+
+    '<button class="btn-remove" data-role="archive-quote" data-qid="'+q.id+'" title="보관함으로 이동">🗄️</button>'+
   '</div>';
+}
+/* ============ 계약관리: 전체 고객 계약서 현황 ============ */
+async function renderContractsHub(){
+  $main.innerHTML = estHubBackBtn()+'<div class="page-head"><div><h1>계약관리</h1><div class="desc">전체 고객의 계약서 현황이에요.</div></div></div>'+
+    '<div class="loading-note">불러오는 중…</div>';
+  const { data, error } = await sb.from('contracts')
+    .select('id, token, customer_name, construction_name, quote_label, quote_type, total, status, created_at, signed_at')
+    .order('created_at', {ascending:false});
+  if(state.view!=='estimate') return;
+  let html = estHubBackBtn()+'<div class="page-head"><div><h1>계약관리</h1><div class="desc">전체 고객의 계약서 현황이에요.</div></div></div>';
+  html += '<input type="text" id="ct-hub-search" class="cust-search" placeholder="고객명·공사명으로 검색">';
+  html += '<div id="ct-hub-list" class="ct-hub-list"></div>';
+  $main.innerHTML = html;
+  bindEstHubBack();
+  const list = data || [];
+  function render(filterQ){
+    const box = document.getElementById('ct-hub-list');
+    const filtered = !filterQ ? list : list.filter(c =>
+      (c.customer_name||'').toLowerCase().includes(filterQ.toLowerCase()) ||
+      (c.construction_name||'').toLowerCase().includes(filterQ.toLowerCase()));
+    if(filtered.length===0){ box.innerHTML = '<div class="empty-note">아직 생성된 계약서가 없어요.</div>'; return; }
+    box.innerHTML = filtered.map(c=>{
+      let d = ''; try{ d = new Date(c.created_at).toLocaleDateString('ko-KR'); }catch(e){}
+      const link = window.location.origin + '/contract-sign.html?token=' + c.token;
+      return '<div class="ct-hub-row">'+
+        '<div class="ct-hub-main">'+
+          '<div class="ct-hub-name">'+escapeHtml(c.customer_name||'(고객명 없음)')+' · '+escapeHtml(c.construction_name||c.quote_label||'')+
+            ' <span class="tag tag-'+(c.status==='signed'?'signed':'pending')+'">'+(c.status==='signed'?'서명완료':'대기중')+'</span></div>'+
+          '<div class="ct-hub-meta">'+d+' 생성 · '+(c.quote_type==='direct'?'직영':'턴키')+' · 총 ₩ '+won(c.total||0)+'</div>'+
+        '</div>'+
+        '<a class="btn btn-secondary btn-sm" href="'+escapeHtml(link)+'" target="_blank" rel="noopener">미리보기 →</a>'+
+      '</div>';
+    }).join('');
+  }
+  render('');
+  document.getElementById('ct-hub-search').addEventListener('input', e=>render(e.target.value.trim()));
+}
+/* ============ 견적 보관함 ============ */
+async function renderQuoteArchive(){
+  $main.innerHTML = estHubBackBtn()+'<div class="page-head"><div><h1>견적 보관함</h1><div class="desc">목록에서 빼둔 견적을 모아뒀어요. 필요하면 다시 꺼내올 수 있어요.</div></div></div>'+
+    '<div class="loading-note">불러오는 중…</div>';
+  const { data, error } = await sb.from('quotes').select('id, customer_id, label, total, created_at').eq('is_archived', true).order('created_at', {ascending:false});
+  if(state.view!=='estimate') return;
+  let html = estHubBackBtn()+'<div class="page-head"><div><h1>견적 보관함</h1><div class="desc">목록에서 빼둔 견적을 모아뒀어요. 필요하면 다시 꺼내올 수 있어요.</div></div></div>';
+  const list = data||[];
+  if(list.length===0){
+    html += '<div class="empty-note">보관함이 비어있어요.</div>';
+  } else {
+    html += '<div class="est-hub-list">'+list.map(q=>{
+      let d = ''; try{ d = q.created_at.slice(0,10); }catch(e){}
+      const cust = q.customer_id ? customerById(q.customer_id) : null;
+      return '<div class="est-hub-quote-row">'+
+        '<span class="est-hub-quote-name">'+escapeHtml(q.label)+(cust?' · '+escapeHtml(cust.name):'')+'</span>'+
+        '<span class="est-hub-quote-meta">'+d+' · ₩ '+won(q.total||0)+'</span>'+
+        '<button class="btn btn-secondary btn-sm" data-role="restore-quote" data-qid="'+q.id+'">복원</button>'+
+      '</div>';
+    }).join('')+'</div>';
+  }
+  $main.innerHTML = html;
+  bindEstHubBack();
+  $main.querySelectorAll('[data-role="restore-quote"]').forEach(el=>{
+    el.addEventListener('click', async ()=>{
+      await sb.from('quotes').update({is_archived:false}).eq('id', el.dataset.qid);
+      renderMain();
+    });
+  });
 }
 
 /* ============ Projects (kanban) ============ */
@@ -1485,6 +1601,7 @@ function goToEstimateForCustomer(c, quoteId){
   if(proj) qs += '&project_name='+encodeURIComponent(proj.name);
   if(quoteId) qs += '&quote_id='+encodeURIComponent(quoteId);
   state.estimateQuery = qs;
+  state.estimateSection = 'quotes';
   state.view = 'estimate';
   closeDetail();
   renderMain(); renderNav();
