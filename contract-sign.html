@@ -23,6 +23,24 @@ body{margin:0; font-family:'Pretendard',-apple-system,sans-serif; background:var
 .header .brand{font-size:12px; font-weight:800; letter-spacing:.08em; color:var(--accent);}
 .header h1{margin:4px 0 0; font-size:22px;}
 .card{background:var(--surface); border-radius:var(--radius); box-shadow:var(--shadow); padding:22px 20px; margin-bottom:16px;}
+.doc-titlebar{background:#DCE0F2; text-align:center; font-size:20px; font-weight:800; letter-spacing:.15em; padding:18px 10px; border-radius:8px 8px 0 0; margin-top:6px;}
+.doc-body{background:var(--surface); box-shadow:var(--shadow); border-radius:0 0 10px 10px; padding:22px 20px 26px; margin-bottom:16px; font-size:12.5px;}
+.ct-numbered-row{display:grid; grid-template-columns:22px 110px 12px 1fr; gap:4px; padding:6px 0; align-items:start; line-height:1.6;}
+.ct-numbered-row.ct-align-top{align-items:start;}
+.ct-num{font-weight:700;}
+.ct-label{font-weight:700; white-space:nowrap;}
+.ct-account-box{display:inline-block; background:#FFF176; padding:3px 10px; border-radius:4px; font-weight:700;}
+.ct-summary-rows{display:flex; flex-direction:column; gap:3px;}
+.ct-summary-row{display:grid; grid-template-columns:70px 20px 110px 1fr 130px; gap:6px; font-size:12px;}
+.ct-summary-label{font-weight:700;}
+.ct-summary-amt{text-align:right;}
+.blank-fill{display:inline-block; min-width:34px; border-bottom:1px solid var(--ink-faint);}
+.ct-clause-note{font-size:11.5px; color:var(--ink-dim); line-height:1.7; margin:18px 0 10px;}
+.ct-date-line{text-align:center; font-size:13px; margin:16px 0;}
+.ct-sign-grid{display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:16px; padding-top:16px; border-top:1px solid var(--line);}
+.ct-sign-role{font-weight:800; font-size:12.5px; margin-bottom:8px;}
+.ct-sign-field{font-size:11.5px; padding:4px 0; color:var(--ink-dim);}
+.ct-sign-field span:first-child{display:inline-block; min-width:70px; color:var(--ink-faint);}
 .card h3{margin:0 0 12px; font-size:14px; letter-spacing:-.01em;}
 .meta-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px 18px; font-size:13px;}
 .meta-grid div span{display:block; font-size:11px; color:var(--ink-faint); margin-bottom:2px;}
@@ -126,37 +144,58 @@ const DIRECT_TERMS = [
   ['14. (특약사항)', '① 예산 초과 알림: 실제 발생 비용이 예상 견적 금액의 5%를 초과할 것으로 예상될 경우, 공급자는 즉시 의뢰인에게 알리고 서면 승인을 얻어야 한다.\n② 자재 직접 구매: 의뢰인이 직접 구매하여 현장에 공급하는 자재에 대해서는 공급자의 수수료(15%)를 적용하지 않는다. (단, 해당 자재의 검수 및 관리에 대한 책임은 의뢰인에게 있다.)\n③ 정산 주기: 공정별 종료 시 실비 내역과 증빙(자재비+인건비)을 공유하고 확인받는다.\n④ 부가가치세: 모든 공사비와 수수료에 대한 부가가치세는 별도로 한다. (단, 일부 자재는 VAT 포함으로 안내함)'],
   ['15. (첨부서류)', '예상 견적서 / 설계도면 / 공정표 / 자재 리스트'],
 ];
+function fmtDateParts(iso){
+  if(!iso) return '<span class="blank-fill">년</span> <span class="blank-fill">월</span> <span class="blank-fill">일</span>';
+  const [y,m,d] = iso.split('-');
+  return y+'년 '+Number(m)+'월 '+Number(d)+'일';
+}
+function paymentRowsHTML(schedule){
+  if(!schedule || schedule.length===0) return '';
+  return schedule.map(p=>
+    '<div class="ct-summary-row"><span class="ct-summary-label">'+escapeHtml(p.label)+'</span><span>금</span><span class="ct-summary-amt">'+won(p.amount)+' 원</span><span>['+won(p.amount)+']</span><span>'+(p.date?fmtDateParts(p.date):'')+'</span></div>'
+  ).join('');
+}
 function renderContract(){
   const c = CONTRACT;
   const isDirect = c.quote_type === 'direct';
-  const title = isDirect ? '인테리어 공사 실비정산 계약서 (공정거래위원회 표준계약서 기반)' : '인테리어 공사 전자계약서';
+  const title = isDirect ? '인테리어 공사 실비정산 계약서 (공정거래위원회 표준계약서 기반)' : '공 사 계 약 서';
   const termsToShow = isDirect ? DIRECT_TERMS : STANDARD_TERMS;
-  const account = isDirect ? '신한은행 110-529-760148 (예금주: 윤상돈)' : 'IBK기업은행 119-248205-04-016 (예금주: 이윤정)';
-  const amountNote = isDirect
-    ? '총 계약금액 = 직접공사비 + 간접공사비 + 업체수수료(Fee)의 합계액입니다. (공과잡비 포함 수수료율 적용, 부가세 별도)'
-    : '';
+  const account = isDirect ? '신한은행 110-529-760148   예금주 : 윤상돈' : 'IBK기업은행 119-248205-04-016   예금주 : 이윤정';
+  const amountLine = isDirect
+    ? '[직접공사비 + 간접공사비 + 업체수수료(Fee)]의 합계액으로 한다<br>즉, 공과잡비 100만+ 총공사비 합계 15%를 수수료라고 정함. (VAT별도)'
+    : '금 '+won(c.total)+' 원 [ ₩'+won(c.total)+' ] (V.A.T 포함)';
   $app.innerHTML = ''+
-  '<div class="header"><div class="brand">DESIGN SANGSANG</div><h1>'+title+'</h1></div>'+
-  '<div class="card">'+
-    '<h3>계약 당사자</h3>'+
-    '<div class="meta-grid">'+
-      '<div><span>공급자</span>디자인상상</div>'+
-      '<div><span>고객명</span>'+escapeHtml(c.customer_name||'-')+'</div>'+
-      '<div><span>공사 시작일</span>'+(c.construction_start||'미정')+'</div>'+
-      '<div><span>공사 종료일</span>'+(c.construction_end||'미정')+'</div>'+
-      '<div><span>하자담보책임기간</span>완공일로부터 1년</div>'+
-      '<div><span>지체상금율</span>1000분의 0.5 (0.05%)</div>'+
-      '<div style="grid-column:1/-1;"><span>거래대금 계좌번호</span>'+account+'</div>'+
+  '<div class="doc-titlebar">'+title+'</div>'+
+  '<div class="doc-body">'+
+    '<div class="ct-numbered-row"><span class="ct-num">1.</span><span class="ct-label">공 사 명</span><span>:</span><span>'+escapeHtml(c.construction_name||c.quote_label||'-')+'</span></div>'+
+    '<div class="ct-numbered-row"><span class="ct-num">2.</span><span class="ct-label">공 사 장 소</span><span>:</span><span>'+escapeHtml(c.site_address||'-')+'</span></div>'+
+    '<div class="ct-numbered-row"><span class="ct-num">3.</span><span class="ct-label">공 사 기 간</span><span>:</span><span>착공 '+fmtDateParts(c.construction_start)+' &nbsp;&nbsp; 완공 '+fmtDateParts(c.construction_end)+'</span></div>'+
+    '<div class="ct-numbered-row"><span class="ct-num">4.</span><span class="ct-label">공 사 금 액</span><span>:</span><span>총 금 액 &nbsp; '+amountLine+'</span></div>'+
+    '<div class="ct-numbered-row ct-align-top"><span class="ct-num">5.</span><span class="ct-label">거 래 대 금</span><span>:</span><div class="ct-summary-rows">'+paymentRowsHTML(c.payment_schedule)+'</div></div>'+
+    '<div class="ct-numbered-row"><span class="ct-num">6.</span><span class="ct-label">하자담보책임기간</span><span>:</span><span>완공일로부터 1년.</span></div>'+
+    '<div class="ct-numbered-row"><span class="ct-num">7.</span><span class="ct-label">지 체 상 금 율</span><span>:</span><span>1000분의 0.5 (0.05%)</span></div>'+
+    '<div class="ct-numbered-row ct-align-top"><span class="ct-num">8.</span><span class="ct-label">특 약 사 항</span><span>:</span><span>'+(c.special_terms?escapeHtml(c.special_terms).replace(/\n/g,'<br>'):'-')+'</span></div>'+
+    '<div class="ct-numbered-row"><span class="ct-num">9.</span><span class="ct-label">거래대금 계좌번호</span><span>:</span><span class="ct-account-box">'+account+'</span></div>'+
+    '<p class="ct-clause-note">위 공사에 관하여 의뢰인[수급자]와 공급자[디자인상상]은 별첨된 공사 계약 조건과 최종 견적서에 의거하여<br>공사 계약을 체결하고 본 계약서 및 관련문서 2통을 작성하여 각각 1통씩 보관한다.</p>'+
+    '<p class="ct-date-line">'+fmtDateParts(null)+'</p>'+
+    '<div class="ct-sign-grid">'+
+      '<div><div class="ct-sign-role">수 급 자 [ 이하 "의뢰인" ]</div>'+
+        '<div class="ct-sign-field"><span>성명[상호] :</span> <span id="ct-sign-name-preview">(서명 후 표시)</span></div>'+
+        '<div class="ct-sign-field"><span>주&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;소 :</span> <span>'+escapeHtml(c.site_address||'-')+'</span></div>'+
+        '<div class="ct-sign-field"><span>연 락 처 :</span> <span>'+escapeHtml(c.customer_phone||'-')+'</span></div>'+
+      '</div>'+
+      '<div><div class="ct-sign-role">공 급 자 [ 이하 "업체" ]</div>'+
+        '<div class="ct-sign-field"><span>성명[상호] :</span> 디자인상상 윤상돈 (인)</div>'+
+        '<div class="ct-sign-field"><span>주&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;소 :</span> 서울 강동구 고덕로 133, 롯데캐슬퍼스트 상가 209호</div>'+
+        '<div class="ct-sign-field"><span>연 락 처 :</span> 010-8223-1179</div>'+
+      '</div>'+
     '</div>'+
   '</div>'+
   '<div class="card">'+
-    '<h3>견적 내역 — '+escapeHtml(c.quote_label||'')+' ('+(isDirect?'직영공사·실비정산':'턴키')+')</h3>'+
-    (amountNote ? '<div class="config-desc" style="margin-bottom:10px;">'+amountNote+'</div>' : '')+
+    '<h3>견적 내역 상세</h3>'+
     '<table class="items"><thead><tr><th>품명</th><th>단위</th><th class="num">수량</th><th class="num">금액</th></tr></thead><tbody>'+itemRowsHTML()+'</tbody></table>'+
     '<div class="grand-row"><span>총 계약 금액</span><span>₩ '+won(c.total)+'</span></div>'+
   '</div>'+
-  (c.payment_terms ? '<div class="card"><h3>결제 조건</h3><div class="terms-block">'+escapeHtml(c.payment_terms)+'</div></div>' : '')+
-  (c.special_terms ? '<div class="card"><h3>특약사항</h3><div class="terms-block">'+escapeHtml(c.special_terms)+'</div></div>' : '')+
   '<div class="card">'+
     '<h3>공사 계약 조건</h3>'+
     '<div class="terms-clause">'+termsToShow.map(t=>'<p><b>'+t[0]+'</b> '+escapeHtml(t[1]).replace(/\n/g,'<br>')+'</p>').join('')+'</div>'+
@@ -173,6 +212,9 @@ function renderContract(){
   setupCanvas();
   document.getElementById('btn-clear-sign').addEventListener('click', clearCanvas);
   document.getElementById('btn-submit-sign').addEventListener('click', submitSignature);
+  const nameInput = document.getElementById('signer-name');
+  const preview = document.getElementById('ct-sign-name-preview');
+  if(nameInput && preview) nameInput.addEventListener('input', ()=>{ preview.textContent = nameInput.value || '(서명 후 표시)'; });
 }
 function setupCanvas(){
   sigCanvas = document.getElementById('sign-canvas');
