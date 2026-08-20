@@ -520,6 +520,10 @@ table.items tbody tr.has-qty:hover{background:#F8F0DC;}
 }
 .total-card .vat-note{font-size:11px; opacity:.6; margin-top:6px;}
 .note-box{margin-top:14px;}
+.option-note-box{margin-top:14px; padding:12px 14px; background:var(--surface-2); border:1.3px dashed var(--line-strong); border-radius:10px;}
+.option-note-label{font-size:11px; font-weight:800; color:var(--ink-dim);}
+.option-note-amt{font-size:16px; font-weight:800; margin-top:4px;}
+.option-note-hint{font-size:10.5px; color:var(--ink-faint); margin-top:6px; line-height:1.5;}
 .note-box-label{display:block; font-size:11px; font-weight:700; color:var(--ink-dim); margin-bottom:6px;}
 .note-box textarea{width:100%; min-height:70px; padding:10px 11px; border:1.3px solid var(--line-strong); border-radius:8px; font-size:12.5px; font-family:inherit; resize:vertical;}
 
@@ -1272,23 +1276,45 @@ function laborLineAmount(group){
   return carpenterEffectiveDays(group) * tradeDayWage(group);
 }
 function groupSum(group){
+  // 옵션 체크된 항목은 실제 견적(소계)에 포함하지 않음 - 참고 금액으로만 별도 안내
   if(isCarpenterDirectGroup(group)){
     let matSum = 0, expSum = 0;
     CATALOG[group].items.forEach((it,i)=>{
       const st = getQty(group,i);
-      if(st.q>0){ matSum += itemMaterialRaw(group,i)*st.q; expSum += itemExpenseRaw(group,i)*st.q; }
+      if(st.q>0 && !st.opt){ matSum += itemMaterialRaw(group,i)*st.q; expSum += itemExpenseRaw(group,i)*st.q; }
     });
-    getCustomList(group).forEach(it=>{ if(it.q>0) matSum += lineAmt(it.p, it.q); });
+    getCustomList(group).forEach(it=>{ if(it.q>0 && !it.opt) matSum += lineAmt(it.p, it.q); });
     // 인건비(품수 입력값 × 일당)를 견적 항목으로 포함해서 합산
     return matSum + expSum + laborLineAmount(group);
   }
   let sum = 0;
   CATALOG[group].items.forEach((it,i)=>{
     const st = getQty(group,i);
-    if(st.q>0) sum += lineAmt(computePrice(group,i), st.q);
+    if(st.q>0 && !st.opt) sum += lineAmt(computePrice(group,i), st.q);
   });
   getCustomList(group).forEach(it=>{
-    if(it.q>0) sum += lineAmt(it.p, it.q);
+    if(it.q>0 && !it.opt) sum += lineAmt(it.p, it.q);
+  });
+  return sum;
+}
+function groupOptionSum(group){
+  // 옵션 체크된 항목만의 참고 금액 합계 (견적 소계에는 미포함)
+  if(isCarpenterDirectGroup(group)){
+    let sum = 0;
+    CATALOG[group].items.forEach((it,i)=>{
+      const st = getQty(group,i);
+      if(st.q>0 && st.opt) sum += lineAmt(itemMaterialRaw(group,i)+itemExpenseRaw(group,i), st.q);
+    });
+    getCustomList(group).forEach(it=>{ if(it.q>0 && it.opt) sum += lineAmt(it.p, it.q); });
+    return sum;
+  }
+  let sum = 0;
+  CATALOG[group].items.forEach((it,i)=>{
+    const st = getQty(group,i);
+    if(st.q>0 && st.opt) sum += lineAmt(computePrice(group,i), st.q);
+  });
+  getCustomList(group).forEach(it=>{
+    if(it.q>0 && it.opt) sum += lineAmt(it.p, it.q);
   });
   return sum;
 }
@@ -1315,42 +1341,13 @@ function computeTotals(){
   CAT_ORDER.forEach(cid=>{
     let sum = 0;
     CAT_GROUPS[cid].forEach(group=>{
-      sum += groupSum(group);
-      if(isCarpenterDirectGroup(group)){
-        // 직영모드(목공/타일/전기/필름): 재료비·경비는 옵션 체크 여부대로 나누고, 인건비(품수)만 기본공사비에 한 덩어리로 포함
-        CATALOG[group].items.forEach((it,i)=>{
-          const st = getQty(group, i);
-          if(st.q>0){
-            const amt = lineAmt(itemMaterialRaw(group,i)+itemExpenseRaw(group,i), st.q);
-            if(st.opt) optionDirect += amt; else basicDirect += amt;
-          }
-        });
-        getCustomList(group).forEach(it=>{
-          if(it.q>0){
-            const amt = lineAmt(it.p, it.q);
-            if(it.opt) optionDirect += amt; else basicDirect += amt;
-          }
-        });
-        basicDirect += laborLineAmount(group);
-        return;
-      }
-      CATALOG[group].items.forEach((it,i)=>{
-        const st = getQty(group, i);
-        if(st.q>0){
-          const amt = lineAmt(computePrice(group,i), st.q);
-          if(st.opt) optionDirect += amt; else basicDirect += amt;
-        }
-      });
-      getCustomList(group).forEach(it=>{
-        if(it.q>0){
-          const amt = lineAmt(it.p, it.q);
-          if(it.opt) optionDirect += amt; else basicDirect += amt;
-        }
-      });
+      sum += groupSum(group); // 옵션 제외한 실제 견적 반영 금액
+      basicDirect += groupSum(group);
+      optionDirect += groupOptionSum(group); // 참고용 - 소계·총액에는 미포함
     });
     byCat[cid] = sum;
   });
-  const directTotal = basicDirect + optionDirect;
+  const directTotal = basicDirect; // 옵션 금액은 포함하지 않음 (참고용으로만 별도 안내)
   const isDirect = state.meta.quoteType === 'direct';
 
   if(isDirect){
@@ -2645,8 +2642,10 @@ function bindMainEvents(){
     });
     $main.querySelectorAll('[data-role="opt"]').forEach(el=>{
       el.addEventListener('change', e=>{
-        setQty(e.target.dataset.group, parseInt(e.target.dataset.i,10), {opt:e.target.checked});
-        renderSummary();
+        const group = e.target.dataset.group;
+        setQty(group, parseInt(e.target.dataset.i,10), {opt:e.target.checked});
+        updateSubtotalDisplay(group);
+        renderNav(); renderSummary();
       });
     });
     $main.querySelectorAll('[data-role="qadjust"]').forEach(el=>{
@@ -3122,7 +3121,6 @@ function summaryHTML(){
   let html = '<div class="summary-title">견적 요약 · '+(t.isDirect?'직영공사':'턴키')+'</div>';
   html += '<ul class="summary-list">';
   html += '<li>기본 공사 직접비<span class="amt">'+won(t.basicDirect)+'</span></li>';
-  html += '<li>옵션 공사 직접비<span class="amt">'+won(t.optionDirect)+'</span></li>';
   if(t.isDirect){
     html += '<li class="strong">A. 실행원가 소계 (마진 0%)<span class="amt">'+won(t.directTotal)+'</span></li>';
     html += '<li class="indent">수수료 ('+pct(state.quoteConfig.feePercent/100)+'%)<span class="amt">'+won(t.serviceFee)+'</span></li>';
@@ -3138,6 +3136,13 @@ function summaryHTML(){
   html += '<li>'+(t.isDirect ? '부가가치세'+(((t.vatOnFee?1:0)+(t.itemVat>0?1:0))>1 ? ' (수수료+항목별)' : (t.vatOnFee?' (수수료 10%)':(t.itemVat>0?' (항목별)':' (미포함)'))) : '부가가치세 (10%)')+'<span class="amt">'+won(t.vat)+'</span></li>';
   html += '</ul>';
   html += '<div class="total-card"><div class="label">총 공사 견적 금액</div><div class="value">₩ '+won(t.grand)+'</div><div class="vat-note">부가가치세 포함 금액입니다</div></div>';
+  if(t.optionDirect>0){
+    html += '<div class="option-note-box">'+
+      '<div class="option-note-label">옵션 항목 (참고용, 위 총액에 미포함)</div>'+
+      '<div class="option-note-amt">₩ '+won(t.optionDirect)+'</div>'+
+      '<div class="option-note-hint">체크는 됐지만 이번 견적에는 포함되지 않은 항목들의 참고 금액이에요. 필요 시 옵션 체크를 해제하면 본 견적에 포함돼요.</div>'+
+    '</div>';
+  }
   html += '<div class="note-box">'+
     '<label class="note-box-label">비고</label>'+
     '<textarea id="quote-note-input" placeholder="이 견적에 대한 메모나 특이사항을 적어두세요.">'+escapeHtml(state.meta.note||'')+'</textarea>'+
