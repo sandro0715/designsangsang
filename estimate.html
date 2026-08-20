@@ -490,6 +490,14 @@ table.items tbody tr.has-qty:hover{background:#F8F0DC;}
 .product-spec{font-size:11px; color:var(--ink-faint); margin-top:2px;}
 .product-price{font-size:12.5px; font-weight:700; margin-top:6px;}
 .product-del{position:absolute; top:8px; right:8px; background:rgba(255,255,255,.9);}
+.product-card-actions{display:flex; gap:6px; padding:0 12px 12px;}
+.product-card-actions .product-edit-btn{flex:1; padding:6px 0; font-size:11.5px;}
+.product-card-actions .product-del{position:static; flex:none;}
+.product-card-edit .product-info{display:flex; flex-direction:column; gap:6px; padding:10px 12px;}
+.product-card-edit select, .product-card-edit input[type="text"]{padding:6px 8px; font-size:11.5px; border:1px solid var(--line-strong); border-radius:6px;}
+.product-card-edit input[type="file"]{font-size:10px;}
+.product-edit-actions{display:flex; gap:6px; margin-top:4px;}
+.product-edit-actions button{flex:1; padding:7px 0; font-size:11.5px;}
 @media (max-width:900px){ .product-form-grid{grid-template-columns:1fr 1fr;} }
 .product-pick-select{width:100%; margin-top:4px; padding:4px 5px; font-size:10.5px; border:1px solid var(--line-strong); border-radius:5px; color:var(--accent-deep);}
 
@@ -770,6 +778,7 @@ const state = {
   adminMoveSelected: {}, // 설정 화면: 다른 공종으로 이동시킬 항목 체크 상태 (key `${group}|${i}` -> true)
   quoteAdjustMode: false,   // 항목별 상세설정 (재료비·노무비·경비·마진율을 이 견적서에서만 조정) on/off
   productPickMode: false,   // 제품에서 고르기 (등록된 제품 드롭다운) on/off - 상세설정과 별개
+  productEditingId: null,   // 설정 > 제품 카탈로그: 지금 수정 중인 제품 id
   quoteItemOverride: {},    // 이 견적서 전용 단가·마진 수정값 (key `${group}|${i}` -> {mat?,labor?,exp?,mo?}) - 서버 기본 단가표에는 영향 없음
   carpenterDaysOverride: {}, // 목공사 품수 수동 조정값 (group -> number|null)
 };
@@ -1415,6 +1424,7 @@ function renderProductGrid(){
   const list = (PRODUCT_CACHE||[]).filter(p=> !filterCid || p.category_cid===filterCid);
   if(list.length===0){ grid.innerHTML = '<div class="empty-note">등록된 제품이 없어요.</div>'; return; }
   grid.innerHTML = list.map(p=>{
+    if(state.productEditingId === p.id) return productEditCardHTML(p);
     const cidTitle = CAT_META[p.category_cid] ? CAT_META[p.category_cid].title : p.category_cid;
     const groupTitle = CATALOG[p.group_id] ? CATALOG[p.group_id].label : p.group_id;
     return '<div class="product-card">'+
@@ -1425,7 +1435,10 @@ function renderProductGrid(){
         (p.spec ? '<div class="product-spec">'+escapeHtml(p.spec)+'</div>' : '')+
         '<div class="product-price">₩ '+won(p.price)+' / '+escapeHtml(p.unit||'식')+'</div>'+
       '</div>'+
-      '<button class="btn-remove product-del" data-role="product-del" data-id="'+p.id+'" title="삭제">×</button>'+
+      '<div class="product-card-actions">'+
+        '<button class="btn-secondary product-edit-btn" data-role="product-edit" data-id="'+p.id+'">수정</button>'+
+        '<button class="btn-remove product-del" data-role="product-del" data-id="'+p.id+'" title="삭제">×</button>'+
+      '</div>'+
     '</div>';
   }).join('');
   grid.querySelectorAll('[data-role="product-del"]').forEach(el=>{
@@ -1435,6 +1448,70 @@ function renderProductGrid(){
       await loadProductCache();
       renderProductGrid();
     });
+  });
+  grid.querySelectorAll('[data-role="product-edit"]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      state.productEditingId = el.dataset.id;
+      renderProductGrid();
+    });
+  });
+  bindProductEditEvents();
+}
+function productEditCardHTML(p){
+  const groupOpts = groupOptionsForCid(p.category_cid).map(o=>'<option value="'+o.group+'" '+(o.group===p.group_id?'selected':'')+'>'+o.label+'</option>').join('');
+  return '<div class="product-card product-card-edit">'+
+    (p.photo_path ? '<img src="'+productPhotoUrl(p.photo_path)+'" class="product-photo">' : '<div class="product-photo product-photo-empty">사진 없음</div>')+
+    '<div class="product-info">'+
+      '<select id="pe-cid" data-id="'+p.id+'">'+CAT_ORDER.map(cid=>'<option value="'+cid+'" '+(cid===p.category_cid?'selected':'')+'>'+CAT_META[cid].no+'. '+CAT_META[cid].title+'</option>').join('')+'</select>'+
+      '<select id="pe-group">'+groupOpts+'</select>'+
+      '<input type="text" id="pe-name" value="'+escapeHtml(p.name)+'" placeholder="제품명">'+
+      '<input type="text" id="pe-spec" value="'+escapeHtml(p.spec||'')+'" placeholder="규격">'+
+      '<input type="text" id="pe-unit" value="'+escapeHtml(p.unit||'식')+'" placeholder="단위">'+
+      '<input type="text" inputmode="numeric" class="money-input" id="pe-price" value="'+fmtNum(p.price)+'" placeholder="가격">'+
+      '<input type="file" id="pe-photo" accept="image/*">'+
+      '<div class="product-edit-actions">'+
+        '<button class="btn-primary" id="pe-save-btn" data-id="'+p.id+'">저장</button>'+
+        '<button class="btn-secondary" id="pe-cancel-btn">취소</button>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+}
+function bindProductEditEvents(){
+  const cidSel = document.getElementById('pe-cid');
+  if(!cidSel) return;
+  cidSel.addEventListener('change', ()=>{
+    document.getElementById('pe-group').innerHTML = groupOptionsForCid(cidSel.value).map(o=>'<option value="'+o.group+'">'+o.label+'</option>').join('');
+  });
+  document.getElementById('pe-cancel-btn').addEventListener('click', ()=>{
+    state.productEditingId = null;
+    renderProductGrid();
+  });
+  document.getElementById('pe-save-btn').addEventListener('click', async (e)=>{
+    const id = e.target.dataset.id;
+    const btn = e.target;
+    btn.disabled = true; btn.textContent = '저장 중…';
+    const update = {
+      category_cid: cidSel.value,
+      group_id: document.getElementById('pe-group').value,
+      name: document.getElementById('pe-name').value.trim(),
+      spec: document.getElementById('pe-spec').value.trim(),
+      unit: document.getElementById('pe-unit').value.trim() || '식',
+      price: parseCommaNum(document.getElementById('pe-price').value),
+    };
+    if(!update.name){ alert('제품명을 입력해 주세요.'); btn.disabled=false; btn.textContent='저장'; return; }
+    const fileEl = document.getElementById('pe-photo');
+    if(fileEl.files[0]){
+      const file = fileEl.files[0];
+      const path = Date.now()+'-'+file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+      const { error: upErr } = await sb.storage.from('products').upload(path, file);
+      if(upErr){ alert('사진 업로드 실패: '+upErr.message); btn.disabled=false; btn.textContent='저장'; return; }
+      update.photo_path = path;
+    }
+    const { error } = await sb.from('products').update(update).eq('id', id);
+    if(error){ alert('저장 실패: '+error.message); btn.disabled=false; btn.textContent='저장'; return; }
+    state.productEditingId = null;
+    await loadProductCache();
+    renderProductGrid();
   });
 }
 
