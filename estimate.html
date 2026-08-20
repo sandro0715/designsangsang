@@ -1802,7 +1802,7 @@ function itemRowHTML(group, i){
     : '';
   const groupProducts = state.productPickMode ? (PRODUCT_CACHE||[]).filter(p=>p.group_id===group) : [];
   const productPicker = (state.productPickMode && groupProducts.length>0)
-    ? '<select class="product-pick-select" data-role="product-pick" data-group="'+group+'" data-i="'+i+'"><option value="">제품에서 선택…</option>'+groupProducts.map(p=>'<option value="'+p.id+'">'+escapeHtml(p.name)+' (₩'+won(p.price)+')</option>').join('')+'</select>'
+    ? '<select class="product-pick-select" data-role="product-pick" data-group="'+group+'" data-i="'+i+'"><option value="">제품에서 선택…</option>'+groupProducts.map(p=>'<option value="'+p.id+'">'+escapeHtml(p.name)+(p.spec?' · '+escapeHtml(p.spec):'')+'</option>').join('')+'</select>'
     : '';
   return ''+
   '<tr class="'+(st.q>0?'has-qty':'')+(adj?' qadjust-row':'')+'">'+
