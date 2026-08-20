@@ -2788,7 +2788,7 @@ function bindMainEvents(){
     $main.querySelectorAll('[data-role="add-item"]').forEach(el=>{
       el.addEventListener('click', async e=>{
         const group = e.target.dataset.group;
-        CATALOG[group].items.push({ n:'새 품목', subcat:'', vatRequired:false, defaultIdx:0,
+        CATALOG[group].items.push({ n:'', subcat:'', vatRequired:false, defaultIdx:0,
           variants:[{label:'기본', u:'식', mat:0, labor:0, exp:0, mp:-2, lp:-3, ep:-3, mo:undefined}] });
         await saveGroupFullToServer(group);
         renderMain();
@@ -2797,7 +2797,7 @@ function bindMainEvents(){
     $main.querySelectorAll('[data-role="add-variant"]').forEach(el=>{
       el.addEventListener('click', async e=>{
         const group = e.target.dataset.group, i = parseInt(e.target.dataset.i,10);
-        itemVariants(CATALOG[group].items[i]).push({label:'새 하위그룹', u:'식', mat:0, labor:0, exp:0, mp:-2, lp:-3, ep:-3, mo:undefined});
+        itemVariants(CATALOG[group].items[i]).push({label:'', u:'식', mat:0, labor:0, exp:0, mp:-2, lp:-3, ep:-3, mo:undefined});
         if(!Array.isArray(CATALOG[group].items[i].variants)){
           // 과거 flat 구조였다면 이번에 변환
           CATALOG[group].items[i] = { n:CATALOG[group].items[i].n, subcat:CATALOG[group].items[i].subcat||'', vatRequired:!!CATALOG[group].items[i].vatRequired, defaultIdx:0, variants:itemVariants(CATALOG[group].items[i]) };
