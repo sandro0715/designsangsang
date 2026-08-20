@@ -376,6 +376,8 @@ body.nav-hidden.embed-admin .layout{grid-template-columns:1fr !important;}
   border-left:3px solid var(--accent);
   padding-left:9px;
 }
+.bathroom-subgroup-title{display:flex; align-items:center; justify-content:space-between;}
+.bathroom-subgroup-title .btn-remove{flex:none; width:auto; height:auto; padding:4px 10px; font-size:11px; border-radius:6px;}
 .subgroup-title:first-of-type{margin-top:0;}
 
 table.items{
@@ -814,7 +816,7 @@ const CAT_META = {
 };
 const CAT_GROUPS = {
   "1":["1"], "2":["2"], "3":["3"], "4":["4"], "5":["5"],
-  "6":["6a","6b"],
+  "6":["6a"], // 욕실 공사: 기본 1개소(6a). 견적 작성 시 "욕실 추가"로 최대 4개소까지 늘어남 (아래 bathroomGroupIds 참고)
   "7":["7"], "8":["8"], "9":["9"], "10":["10"],
   "11":["11"], "12":["12"], "13":["14"], "14":["13"],
 };
@@ -834,6 +836,7 @@ const state = {
   meta: { project:"", customer:"", date: new Date().toISOString().slice(0,10), quoteType:"turnkey" }, // quoteType: "turnkey"(턴키) | "direct"(직영)
   selected: {},       // key `${group}|${i}` -> true  (체크리스트에서 선택된 항목)
   selectedVariant: {}, // key `${group}|${i}` -> 하위그룹 인덱스 (미지정 시 기본값 사용)
+  bathroomCount: 1,    // 욕실 공사 개소 수 (1~4)
   phase: "picker",    // "picker" | "select" | "build"  (견적 작성 진행 단계)
   flow: null,         // "solo" | "consult"  (혼자 작업 / 고객 상담 모드)
   selectIdx: 0,       // (미사용 - 이전 버전 호환용)
@@ -1106,8 +1109,62 @@ function backfillSelectedFromQty(){
     if(state.qty[k] && state.qty[k].q > 0) state.selected[k] = true;
   });
 }
+/* ============ 욕실 공사: 여러 개소 추가 (최대 4개소, 전부 "6a" 기준 데이터를 복제해서 씀) ============ */
+function ensureBathroomInstance(n){
+  const gid = n===1 ? "6a" : "6a_"+n;
+  if(!CATALOG[gid]){
+    CATALOG[gid] = JSON.parse(JSON.stringify(CATALOG["6a"])); // 공용욕실 데이터를 그대로 복제 (원본과 별개로 이 견적에서만 사용)
+  }
+  return gid;
+}
+function bathroomGroupIds(){
+  const n = Math.max(1, Math.min(4, state.bathroomCount||1));
+  const ids = [];
+  for(let k=1;k<=n;k++) ids.push(ensureBathroomInstance(k));
+  CAT_GROUPS["6"] = ids; // computeTotals/인쇄뷰 등 기존 로직이 그대로 합산하도록 동적 갱신
+  return ids;
+}
+function addBathroom(){
+  state.bathroomCount = Math.min(4, (state.bathroomCount||1)+1);
+  bathroomGroupIds();
+  saveDraft();
+}
+function removeBathroom(n){
+  if(n===1) return; // 기본 욕실은 삭제 불가
+  const gid = "6a_"+n;
+  // 뒤쪽 욕실들을 한 칸씩 당겨서 빈 번호가 안 생기게 함 (수량 데이터도 함께 이동)
+  const count = state.bathroomCount||1;
+  for(let k=n;k<count;k++){
+    const fromGid = "6a_"+(k+1);
+    const toGid = k===1 ? "6a" : "6a_"+k;
+    Object.keys(state.qty).forEach(key=>{
+      if(key.startsWith(fromGid+"|")){
+        const idx = key.slice(fromGid.length+1);
+        state.qty[toGid+"|"+idx] = state.qty[key];
+        delete state.qty[key];
+      }
+    });
+    Object.keys(state.selected).forEach(key=>{
+      if(key.startsWith(fromGid+"|")){
+        const idx = key.slice(fromGid.length+1);
+        state.selected[toGid+"|"+idx] = state.selected[key];
+        delete state.selected[key];
+      }
+    });
+  }
+  const lastGid = "6a_"+count;
+  Object.keys(state.qty).forEach(k=>{ if(k.startsWith(lastGid+"|")) delete state.qty[k]; });
+  Object.keys(state.selected).forEach(k=>{ if(k.startsWith(lastGid+"|")) delete state.selected[k]; });
+  delete CATALOG[lastGid];
+  state.bathroomCount = Math.max(1, count-1);
+  bathroomGroupIds();
+  saveDraft();
+}
 function groupsForCat(cid){
-  return cid==="6" ? [["6a",CATALOG["6a"].label],["6b",CATALOG["6b"].label]] : [[CAT_GROUPS[cid][0], null]];
+  if(cid==="6"){
+    return bathroomGroupIds().map((gid,idx)=>[gid, '욕실 '+(idx+1)+(idx===0?' (기본)':'')]);
+  }
+  return [[CAT_GROUPS[cid][0], null]];
 }
 function catItemList(group){
   const list = [];
@@ -1309,7 +1366,7 @@ function saveDraft(){
   try{
     localStorage.setItem(STORAGE_DRAFT, JSON.stringify({
       qty: state.qty, custom: state.custom,
-      meta: state.meta, selected: state.selected, selectedVariant: state.selectedVariant, phase: state.phase, flow: state.flow, selectIdx: state.selectIdx, catView: state.catView,
+      meta: state.meta, selected: state.selected, selectedVariant: state.selectedVariant, bathroomCount: state.bathroomCount, phase: state.phase, flow: state.flow, selectIdx: state.selectIdx, catView: state.catView,
       customerId: state.customerId, currentQuoteId: state.currentQuoteId,
       carpenterDaysOverride: state.carpenterDaysOverride, quoteItemOverride: state.quoteItemOverride, quoteAdjustMode: state.quoteAdjustMode, productPickMode: state.productPickMode,
     }));
@@ -1325,6 +1382,7 @@ function loadDraft(){
     state.meta = Object.assign(state.meta, obj.meta || {});
     state.selected = obj.selected || {};
     state.selectedVariant = obj.selectedVariant || {};
+    state.bathroomCount = obj.bathroomCount || 1;
     state.phase = obj.phase || (Object.keys(state.qty).length ? 'build' : 'picker');
     state.flow = obj.flow || null;
     state.selectIdx = obj.selectIdx || 0;
@@ -1370,7 +1428,7 @@ async function saveCurrentAsSnapshot(label, forceNew){
     snapshot: {
       qty: state.qty, custom: state.custom,
       priceOverride: state.priceOverride, marginOverride: state.marginOverride,
-      meta: state.meta, selected: state.selected, selectedVariant: state.selectedVariant, carpenterDaysOverride: state.carpenterDaysOverride, quoteItemOverride: state.quoteItemOverride,
+      meta: state.meta, selected: state.selected, selectedVariant: state.selectedVariant, bathroomCount: state.bathroomCount, carpenterDaysOverride: state.carpenterDaysOverride, quoteItemOverride: state.quoteItemOverride,
     },
   };
   const { error } = await sb.from('quotes').upsert(row);
@@ -1392,6 +1450,7 @@ async function loadSnapshot(id){
   updateQuoteTypeSwitch();
   state.selected = d.selected || {};
   state.selectedVariant = d.selectedVariant || {};
+  state.bathroomCount = d.bathroomCount || 1;
   state.carpenterDaysOverride = d.carpenterDaysOverride || {};
   state.quoteItemOverride = d.quoteItemOverride || {};
   if(selectedCountAll()===0) backfillSelectedFromQty();
@@ -1400,6 +1459,7 @@ async function loadSnapshot(id){
   state.mode = 'quote';
   state.currentQuoteId = snap.id;
   state.customerId = snap.customer_id || state.customerId;
+  bathroomGroupIds(); // 이 견적에 저장된 욕실 개수만큼 인스턴스 복제
   saveDraft();
   renderAll();
 }
@@ -1777,9 +1837,16 @@ function checklistSectionHTML(cid, skipTitle){
   const meta = CAT_META[cid];
   let html = '<div class="select-cat-block">'+(skipTitle?'':'<div class="select-cat-title">CATEGORY '+meta.no+' · '+meta.title+'</div>');
   groupsForCat(cid).forEach(([group,label])=>{
-    if(label) html += '<div class="subgroup-title">'+label+'</div>';
+    if(label){
+      html += '<div class="subgroup-title bathroom-subgroup-title"><span>'+label+'</span>'+
+        (cid==="6" && group!=="6a" ? '<button class="btn-remove" data-role="remove-bathroom" data-group="'+group+'" title="이 욕실 삭제">이 욕실 삭제 ×</button>' : '')+
+      '</div>';
+    }
     html += '<div class="check-list">'+catItemList(group).map(i=>checklistRowHTML(group,i)).join('')+'</div>';
   });
+  if(cid==="6" && (state.bathroomCount||1) < 4){
+    html += '<button class="btn-secondary" id="btn-add-bathroom" style="margin-top:14px;">+ 욕실 추가 ('+(state.bathroomCount||1)+'/4)</button>';
+  }
   html += '</div>';
   return html;
 }
@@ -1862,13 +1929,30 @@ function renderConsultCategory(){
         '<button class="btn-primary" style="flex:none;padding:12px 22px;" data-role="cat-next">다음 공종 → '+CAT_META[CAT_ORDER[idx+1]].title+'</button>')+
       '</div>';
     groupsForCat(cid).forEach(([group,label])=>{
-      if(label) body += '<div class="subgroup-title">'+label+'</div>';
+      if(label){
+        body += '<div class="subgroup-title bathroom-subgroup-title"><span>'+label+'</span>'+
+          (cid==="6" && group!=="6a" ? '<button class="btn-remove" data-role="remove-bathroom" data-group="'+group+'" title="이 욕실 삭제">이 욕실 삭제 ×</button>' : '')+
+        '</div>';
+      }
       body += quoteTableHTML(group);
     });
+    if(cid==="6" && (state.bathroomCount||1) < 4){
+      body += '<button class="btn-secondary" id="btn-add-bathroom" style="margin:14px 0;">+ 욕실 추가 ('+(state.bathroomCount||1)+'/4)</button>';
+    }
   }
   $main.innerHTML = body;
   bindConsultEvents(cid, view);
   if(view !== 'check') bindMainEvents();
+  const addBathBtn = document.getElementById('btn-add-bathroom');
+  if(addBathBtn) addBathBtn.addEventListener('click', ()=>{ addBathroom(); renderAll(); window.scrollTo(0,0); });
+  $main.querySelectorAll('[data-role="remove-bathroom"]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      if(!confirm('이 욕실의 체크·수량 내용을 삭제할까요?')) return;
+      const n = parseInt(el.dataset.group.replace('6a_',''),10);
+      removeBathroom(n);
+      renderAll();
+    });
+  });
 }
 function bindConsultEvents(cid, view){
   $main.querySelectorAll('[data-role="select-item"]').forEach(el=>{
@@ -2476,7 +2560,7 @@ function renderMain(){
     (state.mode==='quote' ? '<button class="btn-secondary" style="flex:none;padding:8px 14px;" data-role="back-to-select">+ 항목 추가하기</button>' : '')+
     '</div>';
 
-  const groups = cid==="6" ? [["6a",CATALOG["6a"].label],["6b",CATALOG["6b"].label]] : [[CAT_GROUPS[cid][0], null]];
+  const groups = [[CAT_GROUPS[cid][0], null]]; // 설정 화면은 항상 기준 데이터(6a 등) 한 그룹만 편집
 
   groups.forEach(([group,label])=>{
     if(label) body += '<div class="subgroup-title">'+label+'</div>';
@@ -3291,10 +3375,12 @@ document.addEventListener('input', e=>{
     if(projectName) state.meta.project = decodeURIComponent(projectName);
     document.querySelectorAll('[data-meta]').forEach(el=>{ el.value = state.meta[el.dataset.meta] || ''; });
     updateQuoteTypeSwitch();
+    bathroomGroupIds();
     renderAll();
   } else {
     // 독립적으로 열었을 때 (기존 동작 그대로)
     loadDraft();
+    bathroomGroupIds();
     renderAll();
   }
 })();
