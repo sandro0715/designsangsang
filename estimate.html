@@ -695,6 +695,11 @@ table.items tbody tr.has-qty:hover{background:#F8F0DC;}
 .wp-add-row{display:flex; gap:8px;}
 .wp-add-row input{flex:1; padding:8px 10px; border:1.3px solid var(--line-strong); border-radius:8px; font-size:13px;}
 .carpenter-box{background:var(--surface-2); border:1.3px dashed var(--line-strong); border-radius:10px; padding:16px; margin-top:16px;}
+.labor-top-item{background:var(--accent-soft); border:1.5px solid var(--accent); border-radius:10px; padding:14px 16px; margin-bottom:16px;}
+.labor-top-label{font-size:13px; font-weight:800; color:var(--accent-deep); margin-bottom:8px;}
+.labor-top-row{display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13px;}
+.labor-top-wage{color:var(--ink-dim);}
+.labor-top-amount{font-weight:800; font-size:15px; margin-left:auto;}
 .carpenter-box-title{font-size:12.5px; font-weight:800; margin-bottom:10px;}
 .carpenter-box-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-size:13px;}
 .carpenter-auto{color:var(--ink-dim); font-size:12px;}
@@ -1261,6 +1266,9 @@ function carpenterEffectiveDays(group){
 function isCarpenterDirectGroup(group){
   return !!TRADE_DAY_GROUPS[group] && state.meta.quoteType === 'direct';
 }
+function laborLineAmount(group){
+  return carpenterEffectiveDays(group) * tradeDayWage(group);
+}
 function groupSum(group){
   if(isCarpenterDirectGroup(group)){
     let matSum = 0, expSum = 0;
@@ -1269,8 +1277,8 @@ function groupSum(group){
       if(st.q>0){ matSum += itemMaterialRaw(group,i)*st.q; expSum += itemExpenseRaw(group,i)*st.q; }
     });
     getCustomList(group).forEach(it=>{ if(it.q>0) matSum += lineAmt(it.p, it.q); });
-    // 인건비(품수)는 견적 금액에 포함하지 않음 - 참고용으로만 표시
-    return matSum + expSum;
+    // 인건비(품수 입력값 × 일당)를 견적 항목으로 포함해서 합산
+    return matSum + expSum + laborLineAmount(group);
   }
   let sum = 0;
   CATALOG[group].items.forEach((it,i)=>{
@@ -2067,34 +2075,49 @@ function windowCalcBoxHTML(group){
     '<div class="window-calc-hint">자평 = (가로mm × 세로mm) ÷ 90000. 위치 목록은 "설정 → 견적관리설정"에서 관리할 수 있어요.</div>'+
   '</div>';
 }
-function carpenterDaysBoxHTML(group){
+function laborTopItemHTML(group){
   const auto = carpenterAutoDays(group);
   const ov = state.carpenterDaysOverride[group];
   const current = (ov !== undefined && ov !== null && ov !== '') ? ov : Math.round(auto*10)/10;
   const wage = tradeDayWage(group);
   return ''+
-  '<div class="carpenter-box">'+
-    '<div class="carpenter-box-title">'+tradeLabel(group)+' 품수 참고 (직영공사)</div>'+
+  '<div class="labor-top-item">'+
+    '<div class="labor-top-label">'+tradeLabel(group)+' 인건비 (품수 입력)</div>'+
+    '<div class="labor-top-row">'+
+      '<input type="number" step="0.1" min="0" class="carpenter-days-input" id="carpenter-days-'+group+'" data-group="'+group+'" value="'+current+'"> 품'+
+      '<span class="labor-top-wage">× 일당 '+won(wage)+'원</span>'+
+      '<span class="labor-top-amount" id="labor-top-amount-'+group+'">= ₩ '+won(current*wage)+'</span>'+
+    '</div>'+
+  '</div>';
+}
+function carpenterDaysBoxHTML(group){
+  const auto = carpenterAutoDays(group);
+  const wage = tradeDayWage(group);
+  return ''+
+  '<div class="carpenter-box" id="carpenter-ref-'+group+'">'+
+    '<div class="carpenter-box-title">'+tradeLabel(group)+' 품수 자동계산 참고</div>'+
     '<div class="carpenter-box-row">'+
       '<span class="carpenter-auto">자동계산 '+auto.toFixed(2)+'품 (선택 항목 노무비 합계 ÷ 일당 '+won(wage)+'원)</span>'+
-      '<input type="number" step="0.1" class="carpenter-days-input" id="carpenter-days-'+group+'" data-group="'+group+'" value="'+current+'"> 품'+
-      '<span class="carpenter-total">약 '+won(current*wage)+'원 상당</span>'+
     '</div>'+
-    '<div class="carpenter-box-hint">견적 금액에는 포함되지 않아요. '+tradeLabel(group)+'·장비대를 직접 협의하실 때 참고하는 값이에요. 필요하시면 "설정"에서 직접 항목으로 추가해 넣으실 수 있어요.</div>'+
+    '<div class="carpenter-box-hint">위 참고값을 보고 상단 "인건비" 입력칸에 실제 협의된 품수를 입력해 주세요. 그 값 × 일당이 견적 금액에 그대로 반영돼요.</div>'+
   '</div>';
 }
 function refreshCarpenterDaysBox(group){
   const input = document.getElementById('carpenter-days-'+group);
-  if(!input) return;
-  const box = input.closest('.carpenter-box');
+  const refBox = document.getElementById('carpenter-ref-'+group);
   const auto = carpenterAutoDays(group);
   const wage = tradeDayWage(group);
-  box.querySelector('.carpenter-auto').textContent = '자동계산 '+auto.toFixed(2)+'품 (선택 항목 노무비 합계 ÷ 일당 '+won(wage)+'원)';
+  if(refBox){
+    const autoSpan = refBox.querySelector('.carpenter-auto');
+    if(autoSpan) autoSpan.textContent = '자동계산 '+auto.toFixed(2)+'품 (선택 항목 노무비 합계 ÷ 일당 '+won(wage)+'원)';
+  }
+  if(!input) return;
   const ov = state.carpenterDaysOverride[group];
   if(ov === undefined || ov === null || ov === ''){
     const days = Math.round(auto*10)/10;
     input.value = days;
-    box.querySelector('.carpenter-total').textContent = '약 '+won(days*wage)+'원 상당';
+    const amtSpan = document.getElementById('labor-top-amount-'+group);
+    if(amtSpan) amtSpan.textContent = '= ₩ '+won(days*wage);
   }
 }
 function quoteTableHTML(group){
@@ -2107,6 +2130,7 @@ function quoteTableHTML(group){
   rows += getCustomList(group).map(it=>customRowHTML(group,it)).join('');
 
   let out = '';
+  if(isCarpenterDirectGroup(group)) out += laborTopItemHTML(group); // 인건비(품수) 실제 견적 항목 - 상단 고정
   if(!rows){
     out += '<div class="empty-note" style="margin:10px 0 22px;">이 공종에서 체크한 항목이 없어요. 아래 "+ 항목 추가하기"에서 체크리스트로 돌아가 선택하거나, 직접 항목을 추가할 수 있어요.</div>';
   } else {
@@ -2121,7 +2145,7 @@ function quoteTableHTML(group){
     '<div class="cat-subtotal" id="subtotal-'+group+'">소계 <b>'+won(groupSum(group))+'</b> 원</div>';
   }
   if(group === "3") out += windowCalcBoxHTML(group);
-  if(isCarpenterDirectGroup(group)) out += carpenterDaysBoxHTML(group);
+  if(isCarpenterDirectGroup(group)) out += carpenterDaysBoxHTML(group); // 자동계산 참고문구 - 하단
   out += ''+
   '<div class="custom-add">'+
     '<div class="custom-add-title">목록에 없는 항목 직접 추가</div>'+
@@ -2735,9 +2759,11 @@ function bindMainEvents(){
         const group = e.target.dataset.group;
         state.carpenterDaysOverride[group] = e.target.value === '' ? null : Number(e.target.value);
         saveDraft();
-        const totalSpan = e.target.closest('.carpenter-box-row').querySelector('.carpenter-total');
         const wage = tradeDayWage(group);
-        totalSpan.textContent = '약 '+won((Number(e.target.value)||0)*wage)+'원 상당';
+        const amtSpan = document.getElementById('labor-top-amount-'+group);
+        if(amtSpan) amtSpan.textContent = '= ₩ '+won((Number(e.target.value)||0)*wage);
+        updateSubtotalDisplay(group);
+        renderNav(); renderSummaryOnly();
       });
     });
   } else {
@@ -3279,6 +3305,15 @@ function buildPrintView(){
             '<td class="p-right">'+it.q+'</td><td class="p-right">'+won(lineAmt(it.p,it.q))+'</td></tr>';
         }
       });
+      if(isCarpenterDirectGroup(group)){
+        const days = carpenterEffectiveDays(group);
+        if(days>0){
+          const wage = tradeDayWage(group);
+          catRows += '<tr><td>'+tradeLabel(group)+' 인건비 (품수)</td><td>품</td>'+
+            '<td class="p-right">-</td><td class="p-right">'+won(wage)+'</td><td class="p-right">-</td>'+
+            '<td class="p-right">'+days+'</td><td class="p-right">'+won(days*wage)+'</td></tr>';
+        }
+      }
     });
     if(catRows){
       rows += '<tr class="p-cat-row"><td colspan="7">'+meta.no+'. '+meta.title+'</td></tr>' + catRows;
@@ -3307,10 +3342,6 @@ function buildPrintView(){
       '<tr class="final"><td>총 계</td><td class="p-right">'+won(t.grand)+' 원</td></tr>'+
     '</tbody></table>'+
     '<div class="p-note">'+
-      (t.isDirect ? Object.keys(TRADE_DAY_GROUPS).map(g=>{
-        if(carpenterEffectiveDays(g)<=0) return '';
-        return '* '+CAT_META[cidForGroup(g)].title+' '+tradeLabel(g)+' 인건비(참고): 약 '+carpenterEffectiveDays(g).toFixed(2)+'품 (₩ '+won(carpenterEffectiveDays(g)*tradeDayWage(g))+' 상당) — 본 금액은 위 견적에 포함되지 않으며, 고객이 '+tradeLabel(g)+'에게 직접 지급합니다.<br>';
-      }).join('') : '')+
       '* 본 견적서는 V.A.T 포함 견적서이며, 발행일로부터 2주간 유효합니다.<br>* 상기 기재된 내용은 참고 단가 기준의 가견적이며, 현장 실측 및 자재·시공 방법 변경에 따라 조정될 수 있습니다.<br>* 입금계좌 : IBK기업은행 119-248205-04-016 (예금주 : 이윤정)</div>';
   document.getElementById('printArea').innerHTML = html;
   window.print();
