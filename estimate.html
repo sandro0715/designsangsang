@@ -379,6 +379,12 @@ body.nav-hidden.embed-admin .layout{grid-template-columns:1fr !important;}
 .bathroom-subgroup-title{display:flex; align-items:center; justify-content:space-between;}
 .bathroom-subgroup-title .btn-remove{flex:none; width:auto; height:auto; padding:4px 10px; font-size:11px; border-radius:6px;}
 .subgroup-title:first-of-type{margin-top:0;}
+.subcat-block-title{
+  font-size:12px; font-weight:800; color:var(--ink-dim);
+  margin:18px 0 8px; padding:5px 10px; background:var(--surface-2);
+  border-radius:6px; display:inline-block;
+}
+.subcat-block-title:first-of-type{margin-top:2px;}
 
 table.items{
   width:100%;
@@ -1872,13 +1878,32 @@ function checklistSectionHTML(cid, skipTitle){
         (cid==="6" && group!=="6a" ? '<button class="btn-remove" data-role="remove-bathroom" data-group="'+group+'" title="이 욕실 삭제">이 욕실 삭제 ×</button>' : '')+
       '</div>';
     }
-    html += '<div class="check-list">'+catItemList(group).map(i=>checklistRowHTML(group,i)).join('')+'</div>';
+    html += subcatGroupedCheckListHTML(group);
   });
   if(cid==="6" && (state.bathroomCount||1) < 4){
     html += '<button class="btn-secondary" id="btn-add-bathroom" style="margin-top:14px;">+ 욕실 추가 ('+(state.bathroomCount||1)+'/4)</button>';
   }
   html += '</div>';
   return html;
+}
+function subcatGroupedCheckListHTML(group){
+  if(group !== "2"){
+    return '<div class="check-list">'+catItemList(group).map(i=>checklistRowHTML(group,i)).join('')+'</div>';
+  }
+  // 철거 및 설비: 소분류별로 묶어서 제목과 함께 표시 (소분류 순서 유지를 위해 선택항목 우선정렬은 적용하지 않음)
+  const idxs = [];
+  orderedItemIndices(group).forEach(i=>{ if(effItem(group,i).n) idxs.push(i); });
+  const buckets = {};
+  const order = [];
+  idxs.forEach(i=>{
+    const sc = effItem(group,i).subcat || '(소분류 미지정)';
+    if(!buckets[sc]){ buckets[sc] = []; order.push(sc); }
+    buckets[sc].push(i);
+  });
+  return order.map(sc=>
+    '<div class="subcat-block-title">'+escapeHtml(sc)+'</div>'+
+    '<div class="check-list">'+buckets[sc].map(i=>checklistRowHTML(group,i)).join('')+'</div>'
+  ).join('');
 }
 function selectSoloHTML(){
   let html = '<div class="select-wrap"><div class="select-head"><h2>필요한 작업을 체크해 주세요</h2><div class="select-desc">체크한 항목만 다음 화면에서 수량을 입력하게 돼요.</div></div>';
