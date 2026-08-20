@@ -2080,7 +2080,7 @@ function windowCalcBoxHTML(group){
 function laborTopItemHTML(group){
   const auto = carpenterAutoDays(group);
   const ov = state.carpenterDaysOverride[group];
-  const current = (ov !== undefined && ov !== null && ov !== '') ? ov : Math.round(auto*10)/10;
+  const current = (ov !== undefined && ov !== null && ov !== '') ? ov : Math.ceil(auto);
   const wage = tradeDayWage(group);
   return ''+
   '<div class="labor-top-item">'+
@@ -2106,7 +2106,7 @@ function refreshCarpenterDaysBox(group){
   if(!input) return;
   const ov = state.carpenterDaysOverride[group];
   if(ov === undefined || ov === null || ov === ''){
-    const days = Math.round(auto*10)/10;
+    const days = Math.ceil(auto);
     input.value = days;
     const amtSpan = document.getElementById('labor-top-amount-'+group);
     if(amtSpan) amtSpan.textContent = '= ₩ '+won(days*wage);
