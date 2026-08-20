@@ -470,6 +470,28 @@ table.items tbody tr.has-qty:hover{background:#F8F0DC;}
   letter-spacing:-.01em;
 }
 .total-card .vat-note{font-size:11px; opacity:.6; margin-top:6px;}
+.note-box{margin-top:14px;}
+.note-box-label{display:block; font-size:11px; font-weight:700; color:var(--ink-dim); margin-bottom:6px;}
+.note-box textarea{width:100%; min-height:70px; padding:10px 11px; border:1.3px solid var(--line-strong); border-radius:8px; font-size:12.5px; font-family:inherit; resize:vertical;}
+
+.product-add-box{background:var(--surface-2); border:1.3px solid var(--line-strong); border-radius:10px; padding:16px; margin:16px 0;}
+.product-form-grid{display:grid; grid-template-columns:1.2fr 1.2fr 1.6fr 1fr .8fr 1fr 1.4fr auto; gap:8px; align-items:center; margin-top:10px;}
+.product-form-grid select, .product-form-grid input[type="text"]{padding:8px 9px; border:1.3px solid var(--line-strong); border-radius:7px; font-size:12.5px;}
+.product-form-grid input[type="file"]{font-size:11px;}
+.product-filter-row{margin:14px 0 10px;}
+.product-filter-row select{padding:8px 10px; border:1.3px solid var(--line-strong); border-radius:8px; font-size:12.5px;}
+.product-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(180px,1fr)); gap:14px;}
+.product-card{position:relative; background:var(--surface); border:1px solid var(--line); border-radius:10px; overflow:hidden;}
+.product-photo{width:100%; height:120px; object-fit:cover; display:block; background:var(--surface-2);}
+.product-photo-empty{display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--ink-faint);}
+.product-info{padding:10px 12px;}
+.product-cat{font-size:10px; color:var(--accent); font-weight:700; margin-bottom:4px;}
+.product-name{font-size:13px; font-weight:800;}
+.product-spec{font-size:11px; color:var(--ink-faint); margin-top:2px;}
+.product-price{font-size:12.5px; font-weight:700; margin-top:6px;}
+.product-del{position:absolute; top:8px; right:8px; background:rgba(255,255,255,.9);}
+@media (max-width:900px){ .product-form-grid{grid-template-columns:1fr 1fr;} }
+.product-pick-select{width:100%; margin-top:4px; padding:4px 5px; font-size:10.5px; border:1px solid var(--line-strong); border-radius:5px; color:var(--accent-deep);}
 
 .by-cat{margin-top:18px;}
 .by-cat-title{font-size:11px; color:var(--ink-faint); font-weight:700; margin-bottom:8px; text-transform:uppercase; letter-spacing:.06em;}
@@ -569,16 +591,17 @@ table.items tbody tr.has-qty:hover{background:#F8F0DC;}
 .select-progress{font-size:11px; color:var(--accent-deep); font-weight:700; text-transform:uppercase; letter-spacing:.04em;}
 .select-cat-block{margin-bottom:26px;}
 .select-cat-title{font-size:12.5px; font-weight:800; color:var(--ink); background:var(--surface-2); padding:8px 12px; border-radius:8px; margin-bottom:8px;}
-.check-list{display:flex; flex-direction:column; gap:2px;}
+.check-list{display:grid; grid-template-columns:repeat(auto-fill, minmax(190px,1fr)); gap:6px;}
 .check-row{
-  display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:7px; cursor:pointer; font-size:13px;
+  display:flex; align-items:flex-start; gap:8px; padding:9px 10px; border-radius:8px; cursor:pointer; font-size:12.5px;
+  border:1.3px solid var(--line); background:var(--surface); min-height:44px;
 }
-.check-row:hover{background:var(--surface-2);}
-.check-row.checked{background:var(--accent-soft);}
-.check-row input{width:16px; height:16px; flex:none; accent-color:var(--accent);}
-.check-name{flex:1; display:flex; flex-direction:column;}
-.check-spec{font-size:11px; color:var(--ink-faint); font-weight:400;}
-.check-unit{font-size:11px; color:var(--ink-faint); flex:none;}
+.check-row:hover{background:var(--surface-2); border-color:var(--line-strong);}
+.check-row.checked{background:var(--accent-soft); border-color:var(--accent);}
+.check-row input{width:15px; height:15px; flex:none; accent-color:var(--accent); margin-top:1px;}
+.check-name{flex:1; display:flex; flex-direction:column; min-width:0;}
+.check-spec{font-size:10.5px; color:var(--ink-faint); font-weight:400;}
+.check-unit{font-size:10.5px; color:var(--ink-faint); flex:none;}
 .select-footer{
   position:fixed; left:0; right:0; bottom:0; z-index:20;
   background:var(--surface); border-top:1.3px solid var(--line-strong);
@@ -974,6 +997,12 @@ function groupsForCat(cid){
 function catItemList(group){
   const list = [];
   orderedItemIndices(group).forEach(i=>{ if(effItem(group,i).n) list.push(i); });
+  // 선택된 항목을 앞으로 정렬해서 체크한 것들이 한눈에 보이도록 (누락 방지)
+  list.sort((a,b)=>{
+    const sa = isItemSelected(group,a) ? 0 : 1;
+    const sb = isItemSelected(group,b) ? 0 : 1;
+    return sa - sb;
+  });
   return list;
 }
 function getQty(group, i){
@@ -1270,6 +1299,11 @@ function renderNav(){
     cfgBtn.innerHTML = '<span class="idx">⚙</span><span>직영공사 수수료</span>';
     cfgBtn.onclick = ()=>{ state.active = 'config'; renderAll(); window.scrollTo(0,0); };
     $nav.appendChild(cfgBtn);
+    const prodBtn = document.createElement('button');
+    prodBtn.className = 'nav-item' + (state.active==='products' ? ' active':'');
+    prodBtn.innerHTML = '<span class="idx">📦</span><span>제품 카탈로그</span>';
+    prodBtn.onclick = ()=>{ state.active = 'products'; renderAll(); window.scrollTo(0,0); };
+    $nav.appendChild(prodBtn);
   }
   CAT_ORDER.forEach(cid=>{
     const meta = CAT_META[cid];
@@ -1283,6 +1317,116 @@ function renderNav(){
 }
 
 /* ============ 직영공사 수수료 설정 (관리자 전용) ============ */
+/* ============ 제품 카탈로그 (자재 사진·가격 등록) ============ */
+let PRODUCT_CACHE = null;
+async function loadProductCache(){
+  const { data } = await sb.from('products').select('*').order('created_at', {ascending:false});
+  PRODUCT_CACHE = data || [];
+  return PRODUCT_CACHE;
+}
+function productPhotoUrl(path){
+  return path ? SUPABASE_URL+'/storage/v1/object/public/products/'+path : '';
+}
+function groupOptionsForCid(cid){
+  return (CAT_GROUPS[cid]||[]).map(g=>({group:g, label: CATALOG[g] ? CATALOG[g].label : g}));
+}
+async function renderProductCatalog(){
+  let body = '<div class="cat-head"><div class="eyebrow">설정</div><h2>제품 카탈로그</h2></div>';
+  body += '<div class="margin-box"><div class="config-desc">타일·욕실·필름·도배·바닥재·조명·주방·가구 등, 실제 시공에 쓰는 구체적인 제품을 사진·가격과 함께 등록해두세요. 견적 작성 화면에서 "제품 선택" 드롭다운으로 바로 불러올 수 있어요.</div></div>';
+  body += '<div class="product-add-box">'+
+    '<div class="margin-box-label">새 제품 등록</div>'+
+    '<div class="product-form-grid">'+
+      '<select id="pf-cid">'+CAT_ORDER.map(cid=>'<option value="'+cid+'">'+CAT_META[cid].no+'. '+CAT_META[cid].title+'</option>').join('')+'</select>'+
+      '<select id="pf-group"></select>'+
+      '<input type="text" id="pf-name" placeholder="제품명 (예: 동화 강마루 A타입)">'+
+      '<input type="text" id="pf-spec" placeholder="규격 (선택)">'+
+      '<input type="text" id="pf-unit" placeholder="단위 (예: ㎡, 장, 식)" value="식">'+
+      '<input type="text" inputmode="numeric" class="money-input" id="pf-price" placeholder="가격">'+
+      '<input type="file" id="pf-photo" accept="image/*">'+
+      '<button class="btn-primary" id="pf-add-btn" style="flex:none;">등록</button>'+
+    '</div>'+
+  '</div>';
+  body += '<div class="product-filter-row">'+
+    '<select id="pfilter-cid"><option value="">전체 대분류</option>'+CAT_ORDER.map(cid=>'<option value="'+cid+'">'+CAT_META[cid].no+'. '+CAT_META[cid].title+'</option>').join('')+'</select>'+
+  '</div>';
+  body += '<div id="product-grid" class="product-grid"><div class="empty-note">불러오는 중…</div></div>';
+  $main.innerHTML = body;
+
+  const cidSelect = document.getElementById('pf-cid');
+  function refreshGroupOptions(){
+    const groupSelect = document.getElementById('pf-group');
+    groupSelect.innerHTML = groupOptionsForCid(cidSelect.value).map(o=>'<option value="'+o.group+'">'+o.label+'</option>').join('');
+  }
+  refreshGroupOptions();
+  cidSelect.addEventListener('change', refreshGroupOptions);
+
+  document.getElementById('pf-add-btn').addEventListener('click', async ()=>{
+    const btn = document.getElementById('pf-add-btn');
+    const name = document.getElementById('pf-name').value.trim();
+    const price = parseCommaNum(document.getElementById('pf-price').value);
+    if(!name){ alert('제품명을 입력해 주세요.'); return; }
+    const fileEl = document.getElementById('pf-photo');
+    btn.disabled = true; btn.textContent = '등록 중…';
+    let photoPath = null;
+    if(fileEl.files[0]){
+      const file = fileEl.files[0];
+      const path = Date.now()+'-'+file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+      const { error: upErr } = await sb.storage.from('products').upload(path, file);
+      if(upErr){ alert('사진 업로드 실패: '+upErr.message); btn.disabled=false; btn.textContent='등록'; return; }
+      photoPath = path;
+    }
+    const { data: { user } } = await sb.auth.getUser();
+    const { error } = await sb.from('products').insert({
+      category_cid: cidSelect.value,
+      group_id: document.getElementById('pf-group').value,
+      name, spec: document.getElementById('pf-spec').value.trim(),
+      unit: document.getElementById('pf-unit').value.trim() || '식',
+      price, photo_path: photoPath, created_by: user ? user.id : null,
+    });
+    btn.disabled = false; btn.textContent = '등록';
+    if(error){ alert('등록 실패: '+error.message); return; }
+    document.getElementById('pf-name').value = '';
+    document.getElementById('pf-spec').value = '';
+    document.getElementById('pf-price').value = '';
+    fileEl.value = '';
+    await loadProductCache();
+    renderProductGrid();
+  });
+  document.getElementById('pfilter-cid').addEventListener('change', renderProductGrid);
+
+  await loadProductCache();
+  renderProductGrid();
+}
+function renderProductGrid(){
+  const grid = document.getElementById('product-grid');
+  if(!grid) return;
+  const filterCid = document.getElementById('pfilter-cid').value;
+  const list = (PRODUCT_CACHE||[]).filter(p=> !filterCid || p.category_cid===filterCid);
+  if(list.length===0){ grid.innerHTML = '<div class="empty-note">등록된 제품이 없어요.</div>'; return; }
+  grid.innerHTML = list.map(p=>{
+    const cidTitle = CAT_META[p.category_cid] ? CAT_META[p.category_cid].title : p.category_cid;
+    const groupTitle = CATALOG[p.group_id] ? CATALOG[p.group_id].label : p.group_id;
+    return '<div class="product-card">'+
+      (p.photo_path ? '<img src="'+productPhotoUrl(p.photo_path)+'" class="product-photo">' : '<div class="product-photo product-photo-empty">사진 없음</div>')+
+      '<div class="product-info">'+
+        '<div class="product-cat">'+escapeHtml(cidTitle)+' · '+escapeHtml(groupTitle)+'</div>'+
+        '<div class="product-name">'+escapeHtml(p.name)+'</div>'+
+        (p.spec ? '<div class="product-spec">'+escapeHtml(p.spec)+'</div>' : '')+
+        '<div class="product-price">₩ '+won(p.price)+' / '+escapeHtml(p.unit||'식')+'</div>'+
+      '</div>'+
+      '<button class="btn-remove product-del" data-role="product-del" data-id="'+p.id+'" title="삭제">×</button>'+
+    '</div>';
+  }).join('');
+  grid.querySelectorAll('[data-role="product-del"]').forEach(el=>{
+    el.addEventListener('click', async ()=>{
+      if(!confirm('이 제품을 삭제할까요?')) return;
+      await sb.from('products').delete().eq('id', el.dataset.id);
+      await loadProductCache();
+      renderProductGrid();
+    });
+  });
+}
+
 function renderDirectFeeConfig(){
   const cfg = state.quoteConfig;
   let body = '<div class="cat-head"><div class="eyebrow">설정</div><h2>직영공사 수수료</h2></div>';
@@ -1550,10 +1694,14 @@ function itemRowHTML(group, i){
   const marginCell = adj
     ? '<input type="number" step="1" class="cost-input num" style="width:56px;" value="'+effMarginPct+'" data-role="qadjust-margin" data-group="'+group+'" data-i="'+i+'" onfocus="this.select()">'
     : '';
+  const groupProducts = adj ? (PRODUCT_CACHE||[]).filter(p=>p.group_id===group) : [];
+  const productPicker = (adj && groupProducts.length>0)
+    ? '<select class="product-pick-select" data-role="product-pick" data-group="'+group+'" data-i="'+i+'"><option value="">제품에서 선택…</option>'+groupProducts.map(p=>'<option value="'+p.id+'">'+escapeHtml(p.name)+' (₩'+won(p.price)+')</option>').join('')+'</select>'
+    : '';
   return ''+
   '<tr class="'+(st.q>0?'has-qty':'')+(adj?' qadjust-row':'')+'">'+
     '<td class="col-idx num">'+(i+1)+'</td>'+
-    '<td class="col-name"><div class="item-name">'+escapeHtml(it.n)+'</div>'+(it.s?'<div class="item-spec">'+escapeHtml(it.s)+'</div>':'')+(adj?'<div class="item-spec">개별 마진율 '+marginCell+' %</div>':'')+'</td>'+
+    '<td class="col-name"><div class="item-name">'+escapeHtml(it.n)+'</div>'+(it.s?'<div class="item-spec">'+escapeHtml(it.s)+'</div>':'')+(adj?'<div class="item-spec">개별 마진율 '+marginCell+' %</div>'+productPicker:'')+'</td>'+
     '<td class="col-unit">'+escapeHtml(it.u)+'</td>'+
     '<td class="col-cost num">'+costCell(parts.mat,'mat')+'</td>'+
     '<td class="col-cost num">'+costCell(parts.labor,'labor')+'</td>'+
@@ -1944,6 +2092,9 @@ function renderMain(){
   if(state.mode === 'admin' && state.active === 'config'){
     renderDirectFeeConfig(); return;
   }
+  if(state.mode === 'admin' && state.active === 'products'){
+    renderProductCatalog(); return;
+  }
   const cid = state.active;
   const meta = CAT_META[cid];
   const titleHTML = state.mode==='admin'
@@ -2027,6 +2178,18 @@ function bindMainEvents(){
         const v = raw === '' ? undefined : Number(raw)/100;
         setQuoteItemField(group, i, 'mo', v);
         renderMain(); // 재료비/노무비/경비 표시값이 마진 반영해서 다시 계산되므로 다시 그림
+      });
+    });
+    $main.querySelectorAll('[data-role="product-pick"]').forEach(el=>{
+      el.addEventListener('change', e=>{
+        const group = e.target.dataset.group, i = parseInt(e.target.dataset.i,10);
+        const product = (PRODUCT_CACHE||[]).find(p=>p.id===e.target.value);
+        if(!product) return;
+        setQuoteItemField(group, i, 'n', product.name);
+        setQuoteItemField(group, i, 's', product.spec||'');
+        setQuoteItemField(group, i, 'u', product.unit||'식');
+        setQuoteItemField(group, i, 'mat', Number(product.price)||0);
+        renderMain();
       });
     });
     $main.querySelectorAll('[data-role="c-qty"]').forEach(el=>{
@@ -2348,6 +2511,10 @@ function summaryHTML(){
   html += '<li>'+(t.isDirect ? '부가가치세'+(t.vatOnFee?' (수수료 10%)':' (미포함)') : '부가가치세 (10%)')+'<span class="amt">'+won(t.vat)+'</span></li>';
   html += '</ul>';
   html += '<div class="total-card"><div class="label">총 공사 견적 금액</div><div class="value">₩ '+won(t.grand)+'</div><div class="vat-note">부가가치세 포함 금액입니다</div></div>';
+  html += '<div class="note-box">'+
+    '<label class="note-box-label">비고</label>'+
+    '<textarea id="quote-note-input" placeholder="이 견적에 대한 메모나 특이사항을 적어두세요.">'+escapeHtml(state.meta.note||'')+'</textarea>'+
+  '</div>';
   html += '<div class="by-cat"><div class="by-cat-title">공종별 내역</div>';
   CAT_ORDER.forEach(cid=>{
     const meta = CAT_META[cid];
@@ -2377,6 +2544,8 @@ function bindSummaryEvents(){
   $summary.querySelectorAll('.by-cat-row').forEach(el=>{
     el.addEventListener('click', ()=>{ state.active = el.dataset.cat; renderAll(); window.scrollTo(0,0); });
   });
+  const noteInput = document.getElementById('quote-note-input');
+  if(noteInput) noteInput.addEventListener('input', e=>{ state.meta.note = e.target.value; saveDraft(); });
   document.getElementById('btn-reset').addEventListener('click', ()=>{
     if(confirm('입력한 모든 수량과 선택 항목을 초기화하고 처음부터 다시 시작할까요? (단가·마진 설정은 유지됩니다)')){
       state.qty = {}; state.custom = {}; state.selected = {};
@@ -2385,8 +2554,9 @@ function bindSummaryEvents(){
       saveDraft(); renderAll();
     }
   });
-  document.getElementById('btn-adjust-toggle').addEventListener('click', ()=>{
+  document.getElementById('btn-adjust-toggle').addEventListener('click', async ()=>{
     state.quoteAdjustMode = !state.quoteAdjustMode;
+    if(state.quoteAdjustMode && !PRODUCT_CACHE) await loadProductCache();
     saveDraft(); renderAll();
   });
   document.getElementById('btn-print').addEventListener('click', buildPrintView);
