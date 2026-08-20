@@ -476,6 +476,7 @@ table.items tbody tr.has-qty:hover{background:#F8F0DC;}
   font-size:16px; line-height:1; padding:2px 6px; border-radius:4px;
 }
 .btn-remove:hover{background:rgba(156,59,46,.1);}
+.btn-copy-item{padding:4px 9px; font-size:10.5px; border-radius:5px; vertical-align:middle;}
 
 /* ===== Summary panel ===== */
 .summary{
@@ -2020,6 +2021,25 @@ function rowDisplayPrice(group, i){
   if(isCarpenterDirectGroup(group)) return itemMaterialRaw(group,i) + itemExpenseRaw(group,i);
   return computePrice(group, i);
 }
+function variantUnitPrice(group, i, vi){
+  const it = effItem(group, i, vi);
+  const isDirect = state.meta.quoteType === 'direct';
+  const m = (it.mo !== undefined && it.mo !== null) ? it.mo : (isDirect ? 0 : categoryMargin(group));
+  let total = 0;
+  if(it.mat !== undefined && it.mat !== null) total += roundUp(it.mat * (1+m), it.mp);
+  if(it.labor !== undefined && it.labor !== null) total += roundUp(it.labor * (1+m), it.lp);
+  if(it.exp !== undefined && it.exp !== null) total += roundUp(it.exp * (1+m), it.ep);
+  return Math.round(total);
+}
+function copyItemAsCustom(group, i){
+  const rawItem = CATALOG[group].items[i];
+  const variants = itemVariants(rawItem);
+  const curVi = (state.selectedVariant && state.selectedVariant[group+"|"+i] !== undefined) ? state.selectedVariant[group+"|"+i] : itemDefaultVariantIdx(rawItem);
+  const nextVi = variants.length>1 ? (curVi+1)%variants.length : curVi; // 하위그룹이 여러 개면 다음 하위그룹으로 자동 선택해서 복사
+  const v = variants[nextVi] || variants[0];
+  const price = variantUnitPrice(group, i, nextVi);
+  addCustom(group, rawItem.n, v.label||'', v.u||'식', price, false);
+}
 function itemRowHTML(group, i){
   const it = effItemQ(group, i);
   const parts = rowPriceParts(group, i);
@@ -2055,7 +2075,9 @@ function itemRowHTML(group, i){
     '<td class="col-cost num">'+costCell(parts.exp,'exp')+'</td>'+
     '<td class="col-opt"><input type="checkbox" class="opt-check" '+(st.opt?'checked':'')+' data-role="opt" data-group="'+group+'" data-i="'+i+'" title="옵션 공사로 표시"></td>'+
     '<td class="col-qty"><input type="number" min="0" step="1" class="qty-input num" value="'+(st.q||'')+'" placeholder="0" data-role="qty" data-group="'+group+'" data-i="'+i+'" onfocus="this.select()"></td>'+
-    '<td class="col-amt num"><span class="amt-text">'+(st.q>0? won(amt) : '')+'</span> <button class="btn-remove" data-role="item-del" data-group="'+group+'" data-i="'+i+'" title="이 견적에서 삭제">×</button></td>'+
+    '<td class="col-amt num"><span class="amt-text">'+(st.q>0? won(amt) : '')+'</span> '+
+      '<button class="btn-secondary btn-copy-item" data-role="copy-item" data-group="'+group+'" data-i="'+i+'" title="'+(variants.length>1?'다른 하위그룹으로 하나 더 추가':'이 항목 복사해서 하나 더 추가')+'">복사</button>'+
+      ' <button class="btn-remove" data-role="item-del" data-group="'+group+'" data-i="'+i+'" title="이 견적에서 삭제">×</button></td>'+
   '</tr>';
 }
 function customRowHTML(group, it){
@@ -2724,6 +2746,12 @@ function bindMainEvents(){
         toggleItemSelected(group, i); // 체크 해제 + 수량 초기화
         saveDraft();
         renderMain();
+      });
+    });
+    $main.querySelectorAll('[data-role="copy-item"]').forEach(el=>{
+      el.addEventListener('click', e=>{
+        const group = e.target.dataset.group, i = parseInt(e.target.dataset.i,10);
+        copyItemAsCustom(group, i);
       });
     });
     $main.querySelectorAll('[data-role="new-add"]').forEach(el=>{
