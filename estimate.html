@@ -966,7 +966,7 @@ function categoryMargin(group){
 function computePrice(group, i){
   const it = effItemQ(group, i);
   const isDirect = state.meta.quoteType === 'direct';
-  const m = isDirect ? 0 : ((it.mo !== undefined && it.mo !== null) ? it.mo : categoryMargin(group));
+  const m = (it.mo !== undefined && it.mo !== null) ? it.mo : (isDirect ? 0 : categoryMargin(group));
   let total = 0;
   if(it.mat !== undefined && it.mat !== null) total += roundUp(it.mat * (1+m), it.mp);
   if(it.labor !== undefined && it.labor !== null) total += roundUp(it.labor * (1+m), it.lp);
@@ -2009,7 +2009,7 @@ function rowPriceParts(group, i){
     return { mat: itemMaterialRaw(group,i), labor: 0, exp: itemExpenseRaw(group,i) };
   }
   const isDirect = state.meta.quoteType === 'direct';
-  const m = isDirect ? 0 : ((it.mo !== undefined && it.mo !== null) ? it.mo : categoryMargin(group));
+  const m = (it.mo !== undefined && it.mo !== null) ? it.mo : (isDirect ? 0 : categoryMargin(group));
   const mat = (it.mat !== undefined && it.mat !== null) ? roundUp(it.mat * (1+m), it.mp) : 0;
   const labor = (it.labor !== undefined && it.labor !== null) ? roundUp(it.labor * (1+m), it.lp) : 0;
   const exp = (it.exp !== undefined && it.exp !== null) ? roundUp(it.exp * (1+m), it.ep) : 0;
