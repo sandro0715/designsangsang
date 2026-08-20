@@ -475,7 +475,7 @@ table.items tbody tr.has-qty:hover{background:#F8F0DC;}
 .note-box textarea{width:100%; min-height:70px; padding:10px 11px; border:1.3px solid var(--line-strong); border-radius:8px; font-size:12.5px; font-family:inherit; resize:vertical;}
 
 .product-add-box{background:var(--surface-2); border:1.3px solid var(--line-strong); border-radius:10px; padding:16px; margin:16px 0;}
-.product-form-grid{display:grid; grid-template-columns:1.2fr 1.2fr 1.6fr 1fr .8fr 1fr 1.4fr auto; gap:8px; align-items:center; margin-top:10px;}
+.product-form-grid{display:grid; grid-template-columns:1.1fr 1.1fr 1.4fr .9fr .7fr .9fr .9fr .9fr 1.2fr auto; gap:8px; align-items:center; margin-top:10px;}
 .product-form-grid select, .product-form-grid input[type="text"]{padding:8px 9px; border:1.3px solid var(--line-strong); border-radius:7px; font-size:12.5px;}
 .product-form-grid input[type="file"]{font-size:11px;}
 .product-filter-row{margin:14px 0 10px;}
@@ -489,6 +489,7 @@ table.items tbody tr.has-qty:hover{background:#F8F0DC;}
 .product-name{font-size:13px; font-weight:800;}
 .product-spec{font-size:11px; color:var(--ink-faint); margin-top:2px;}
 .product-price{font-size:12.5px; font-weight:700; margin-top:6px;}
+.product-cost-breakdown{font-size:10px; color:var(--ink-faint); margin-top:2px;}
 .product-del{position:absolute; top:8px; right:8px; background:rgba(255,255,255,.9);}
 .product-card-actions{display:flex; gap:4px; padding:0 10px 12px; flex-wrap:wrap;}
 .product-card-actions .product-edit-btn{flex:1 1 auto; padding:6px 4px; font-size:10.5px; min-width:44px;}
@@ -1361,7 +1362,9 @@ async function renderProductCatalog(){
       '<input type="text" id="pf-name" placeholder="제품명 (예: 동화 강마루 A타입)">'+
       '<input type="text" id="pf-spec" placeholder="규격 (선택)">'+
       '<input type="text" id="pf-unit" placeholder="단위 (예: ㎡, 장, 식)" value="식">'+
-      '<input type="text" inputmode="numeric" class="money-input" id="pf-price" placeholder="가격">'+
+      '<input type="text" inputmode="numeric" class="money-input" id="pf-material" placeholder="재료비">'+
+      '<input type="text" inputmode="numeric" class="money-input" id="pf-labor" placeholder="노무비">'+
+      '<input type="text" inputmode="numeric" class="money-input" id="pf-expense" placeholder="경비">'+
       '<input type="file" id="pf-photo" accept="image/*">'+
       '<button class="btn-primary" id="pf-add-btn" style="flex:none;">등록</button>'+
     '</div>'+
@@ -1383,7 +1386,9 @@ async function renderProductCatalog(){
   document.getElementById('pf-add-btn').addEventListener('click', async ()=>{
     const btn = document.getElementById('pf-add-btn');
     const name = document.getElementById('pf-name').value.trim();
-    const price = parseCommaNum(document.getElementById('pf-price').value);
+    const material_cost = parseCommaNum(document.getElementById('pf-material').value);
+    const labor_cost = parseCommaNum(document.getElementById('pf-labor').value);
+    const expense_cost = parseCommaNum(document.getElementById('pf-expense').value);
     if(!name){ alert('제품명을 입력해 주세요.'); return; }
     const fileEl = document.getElementById('pf-photo');
     btn.disabled = true; btn.textContent = '등록 중…';
@@ -1401,13 +1406,15 @@ async function renderProductCatalog(){
       group_id: document.getElementById('pf-group').value,
       name, spec: document.getElementById('pf-spec').value.trim(),
       unit: document.getElementById('pf-unit').value.trim() || '식',
-      price, photo_path: photoPath, created_by: user ? user.id : null,
+      material_cost, labor_cost, expense_cost, photo_path: photoPath, created_by: user ? user.id : null,
     });
     btn.disabled = false; btn.textContent = '등록';
     if(error){ alert('등록 실패: '+error.message); return; }
     document.getElementById('pf-name').value = '';
     document.getElementById('pf-spec').value = '';
-    document.getElementById('pf-price').value = '';
+    document.getElementById('pf-material').value = '';
+    document.getElementById('pf-labor').value = '';
+    document.getElementById('pf-expense').value = '';
     fileEl.value = '';
     await loadProductCache();
     renderProductGrid();
@@ -1433,7 +1440,8 @@ function renderProductGrid(){
         '<div class="product-cat">'+escapeHtml(cidTitle)+' · '+escapeHtml(groupTitle)+'</div>'+
         '<div class="product-name">'+escapeHtml(p.name)+'</div>'+
         (p.spec ? '<div class="product-spec">'+escapeHtml(p.spec)+'</div>' : '')+
-        '<div class="product-price">₩ '+won(p.price)+' / '+escapeHtml(p.unit||'식')+'</div>'+
+        '<div class="product-price">₩ '+won((p.material_cost||0)+(p.labor_cost||0)+(p.expense_cost||0))+' / '+escapeHtml(p.unit||'식')+'</div>'+
+        '<div class="product-cost-breakdown">재료 '+won(p.material_cost||0)+' · 노무 '+won(p.labor_cost||0)+' · 경비 '+won(p.expense_cost||0)+'</div>'+
       '</div>'+
       '<div class="product-card-actions">'+
         '<button class="btn-secondary product-edit-btn" data-role="product-edit" data-id="'+p.id+'">수정</button>'+
@@ -1464,7 +1472,8 @@ function renderProductGrid(){
       const { data: inserted, error } = await sb.from('products').insert({
         category_cid: src.category_cid, group_id: src.group_id,
         name: src.name+' (복사)', spec: src.spec, unit: src.unit,
-        price: src.price, photo_path: src.photo_path,
+        material_cost: src.material_cost, labor_cost: src.labor_cost, expense_cost: src.expense_cost,
+        photo_path: src.photo_path,
         created_by: user ? user.id : null,
       }).select('id').single();
       if(error){ alert('복사 실패: '+error.message); return; }
@@ -1485,7 +1494,9 @@ function productEditCardHTML(p){
       '<input type="text" id="pe-name" value="'+escapeHtml(p.name)+'" placeholder="제품명">'+
       '<input type="text" id="pe-spec" value="'+escapeHtml(p.spec||'')+'" placeholder="규격">'+
       '<input type="text" id="pe-unit" value="'+escapeHtml(p.unit||'식')+'" placeholder="단위">'+
-      '<input type="text" inputmode="numeric" class="money-input" id="pe-price" value="'+fmtNum(p.price)+'" placeholder="가격">'+
+      '<input type="text" inputmode="numeric" class="money-input" id="pe-material" value="'+fmtNum(p.material_cost||0)+'" placeholder="재료비">'+
+      '<input type="text" inputmode="numeric" class="money-input" id="pe-labor" value="'+fmtNum(p.labor_cost||0)+'" placeholder="노무비">'+
+      '<input type="text" inputmode="numeric" class="money-input" id="pe-expense" value="'+fmtNum(p.expense_cost||0)+'" placeholder="경비">'+
       '<input type="file" id="pe-photo" accept="image/*">'+
       '<div class="product-edit-actions">'+
         '<button class="btn-primary" id="pe-save-btn" data-id="'+p.id+'">저장</button>'+
@@ -1514,7 +1525,9 @@ function bindProductEditEvents(){
       name: document.getElementById('pe-name').value.trim(),
       spec: document.getElementById('pe-spec').value.trim(),
       unit: document.getElementById('pe-unit').value.trim() || '식',
-      price: parseCommaNum(document.getElementById('pe-price').value),
+      material_cost: parseCommaNum(document.getElementById('pe-material').value),
+      labor_cost: parseCommaNum(document.getElementById('pe-labor').value),
+      expense_cost: parseCommaNum(document.getElementById('pe-expense').value),
     };
     if(!update.name){ alert('제품명을 입력해 주세요.'); btn.disabled=false; btn.textContent='저장'; return; }
     const fileEl = document.getElementById('pe-photo');
@@ -2294,7 +2307,9 @@ function bindMainEvents(){
         setQuoteItemField(group, i, 'n', product.name);
         setQuoteItemField(group, i, 's', product.spec||'');
         setQuoteItemField(group, i, 'u', product.unit||'식');
-        setQuoteItemField(group, i, 'mat', Number(product.price)||0);
+        setQuoteItemField(group, i, 'mat', Number(product.material_cost)||0);
+        setQuoteItemField(group, i, 'labor', Number(product.labor_cost)||0);
+        setQuoteItemField(group, i, 'exp', Number(product.expense_cost)||0);
         renderMain();
       });
     });
