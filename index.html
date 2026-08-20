@@ -205,12 +205,15 @@ input,select,textarea{font-family:inherit;}
 .cal-cell:hover{background:var(--surface-2);}
 .cal-cell.other-month{background:#F7F5EF; color:var(--ink-faint);}
 .cal-cell.today{box-shadow:inset 0 0 0 2px var(--accent);}
+.cal-cell.drag-over{background:var(--accent-soft); box-shadow:inset 0 0 0 2px var(--accent);}
 .cal-date{font-size:11.5px; font-weight:700; font-family:'JetBrains Mono',monospace;}
 .cal-cell.other-month .cal-date{color:var(--ink-faint);}
 .cal-evt{
   font-size:10.5px; padding:2px 5px; border-radius:4px; font-weight:600;
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:grab;
 }
+.cal-evt:active{cursor:grabbing;}
+.dur-badge{font-size:9px; opacity:.7; font-weight:800;}
 .cal-more{font-size:10px; color:var(--ink-faint); padding-left:5px;}
 
 /* ===== Customers table ===== */
@@ -629,12 +632,12 @@ function customerFromDb(r){
 function eventToDb(e){
   return { id:e.id, title:e.title, type:e.type, customer_id:e.customerId||null, date:e.date,
     start_time:e.start||null, end_time:e.end||null, location:e.location||null, memo:e.memo||null,
-    site_id:e.siteId||null, status:e.status||'confirmed' };
+    site_id:e.siteId||null, status:e.status||'confirmed', duration_days:e.durationDays||1 };
 }
 function eventFromDb(r){
   return { id:r.id, title:r.title, type:r.type, customerId:r.customer_id||null, date:r.date,
     start:r.start_time||'', end:r.end_time||'', location:r.location||'', memo:r.memo||'',
-    siteId:r.site_id||null, status:r.status||'confirmed' };
+    siteId:r.site_id||null, status:r.status||'confirmed', durationDays:r.duration_days||1 };
 }
 function projectToDb(p){
   return { id:p.id, customer_id:p.customerId||null, name:p.name, stage:p.stage, amount:p.amount||0, memo:p.memo||null };
@@ -938,7 +941,8 @@ function renderSchedule(){
       const ti = eventTypeInfo(e.type);
       const site = e.siteId ? siteById(e.siteId) : null;
       const borderStyle = site ? ' style="border-left:3px solid '+site.color+';"' : '';
-      html += '<div class="cal-evt tag-'+ti.tag+'"'+borderStyle+' data-open-event="'+e.id+'">'+(e.start?e.start+' ':'')+statusPrefix(e.status)+escapeHtml(e.title)+'</div>';
+      const durBadge = (e.durationDays && e.durationDays>1) ? ' <span class="dur-badge">'+e.durationDays+'일</span>' : '';
+      html += '<div class="cal-evt tag-'+ti.tag+'"'+borderStyle+' draggable="true" data-open-event="'+e.id+'" data-drag-event="'+e.id+'">'+(e.start?e.start+' ':'')+statusPrefix(e.status)+escapeHtml(e.title)+durBadge+'</div>';
     });
     if(evts.length>3) html += '<div class="cal-more">+'+(evts.length-3)+'건 더보기</div>';
     html += '</div>';
@@ -963,6 +967,24 @@ function renderSchedule(){
     el.addEventListener('click', (ev)=>{
       if(ev.target.closest('[data-open-event]')) return;
       openEventModal(null, el.dataset.day);
+    });
+    el.addEventListener('dragover', (ev)=>{ ev.preventDefault(); el.classList.add('drag-over'); });
+    el.addEventListener('dragleave', ()=>{ el.classList.remove('drag-over'); });
+    el.addEventListener('drop', async (ev)=>{
+      ev.preventDefault();
+      el.classList.remove('drag-over');
+      const evId = ev.dataTransfer.getData('text/plain');
+      const e = state.events.find(x=>x.id===evId);
+      if(!e || e.date===el.dataset.day) return;
+      e.date = el.dataset.day;
+      await sb.from('events').update({date:e.date}).eq('id', e.id);
+      renderMain();
+    });
+  });
+  $main.querySelectorAll('[data-drag-event]').forEach(el=>{
+    el.addEventListener('dragstart', (ev)=>{
+      ev.dataTransfer.setData('text/plain', el.dataset.dragEvent);
+      ev.dataTransfer.effectAllowed = 'move';
     });
   });
   $main.querySelectorAll('[data-open-event]').forEach(el=>{
@@ -1203,6 +1225,7 @@ function openEventModal(id, prefillDate){
           '<div class="field"><label>시작 시간</label><input type="time" id="f-start" value="'+(ev?ev.start||'':'')+'"></div>'+
           '<div class="field"><label>종료 시간</label><input type="time" id="f-end" value="'+(ev?ev.end||'':'')+'"></div>'+
         '</div>'+
+        '<div class="field"><label>기간 (일)</label><input type="number" min="1" id="f-duration" value="'+(ev?(ev.durationDays||1):1)+'"></div>'+
         '<div class="field"><label>장소</label><input type="text" id="f-location" value="'+escapeHtml(ev?ev.location||'':'')+'" placeholder="예: 전시장, 현장 주소"></div>'+
         '<div class="field"><label>메모</label><textarea id="f-memo">'+escapeHtml(ev?ev.memo||'':'')+'</textarea></div>'+
         (ev&&ev.siteId ? '<div class="field"><label class="addr-radio" style="font-size:12.5px;"><input type="checkbox" id="f-confirmed" '+(ev.status==='confirmed'?'checked':'')+'> 이 일정 확정됨 (문자·통화로 확인 완료)</label></div>' : '')+
@@ -1226,6 +1249,7 @@ function openEventModal(id, prefillDate){
       end: document.getElementById('f-end').value,
       location: document.getElementById('f-location').value.trim(),
       memo: document.getElementById('f-memo').value.trim(),
+      durationDays: Math.max(1, parseInt(document.getElementById('f-duration').value,10)||1),
     };
     const confirmEl = document.getElementById('f-confirmed');
     if(confirmEl) data.status = confirmEl.checked ? 'confirmed' : 'tentative';
