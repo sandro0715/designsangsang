@@ -490,8 +490,8 @@ table.items tbody tr.has-qty:hover{background:#F8F0DC;}
 .product-spec{font-size:11px; color:var(--ink-faint); margin-top:2px;}
 .product-price{font-size:12.5px; font-weight:700; margin-top:6px;}
 .product-del{position:absolute; top:8px; right:8px; background:rgba(255,255,255,.9);}
-.product-card-actions{display:flex; gap:6px; padding:0 12px 12px;}
-.product-card-actions .product-edit-btn{flex:1; padding:6px 0; font-size:11.5px;}
+.product-card-actions{display:flex; gap:4px; padding:0 10px 12px; flex-wrap:wrap;}
+.product-card-actions .product-edit-btn{flex:1 1 auto; padding:6px 4px; font-size:10.5px; min-width:44px;}
 .product-card-actions .product-del{position:static; flex:none;}
 .product-card-edit .product-info{display:flex; flex-direction:column; gap:6px; padding:10px 12px;}
 .product-card-edit select, .product-card-edit input[type="text"]{padding:6px 8px; font-size:11.5px; border:1px solid var(--line-strong); border-radius:6px;}
@@ -1437,6 +1437,7 @@ function renderProductGrid(){
       '</div>'+
       '<div class="product-card-actions">'+
         '<button class="btn-secondary product-edit-btn" data-role="product-edit" data-id="'+p.id+'">수정</button>'+
+        '<button class="btn-secondary product-edit-btn" data-role="product-copy" data-id="'+p.id+'">복사</button>'+
         '<button class="btn-remove product-del" data-role="product-del" data-id="'+p.id+'" title="삭제">×</button>'+
       '</div>'+
     '</div>';
@@ -1452,6 +1453,23 @@ function renderProductGrid(){
   grid.querySelectorAll('[data-role="product-edit"]').forEach(el=>{
     el.addEventListener('click', ()=>{
       state.productEditingId = el.dataset.id;
+      renderProductGrid();
+    });
+  });
+  grid.querySelectorAll('[data-role="product-copy"]').forEach(el=>{
+    el.addEventListener('click', async ()=>{
+      const src = (PRODUCT_CACHE||[]).find(p=>p.id===el.dataset.id);
+      if(!src) return;
+      const { data: { user } } = await sb.auth.getUser();
+      const { data: inserted, error } = await sb.from('products').insert({
+        category_cid: src.category_cid, group_id: src.group_id,
+        name: src.name+' (복사)', spec: src.spec, unit: src.unit,
+        price: src.price, photo_path: src.photo_path,
+        created_by: user ? user.id : null,
+      }).select('id').single();
+      if(error){ alert('복사 실패: '+error.message); return; }
+      await loadProductCache();
+      state.productEditingId = inserted.id; // 복사 직후 바로 수정 모드로 열어서 달라질 부분만 고치게
       renderProductGrid();
     });
   });
