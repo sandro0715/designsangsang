@@ -128,12 +128,32 @@ tr.dragging{opacity:.4;}
 tr.drag-over{outline:2px dashed var(--accent); outline-offset:-2px;}
 .move-check{vertical-align:middle;}
 .move-bar{display:flex; align-items:center; gap:10px; margin:14px 0; flex-wrap:wrap;}
+.admin-item-list{display:flex; flex-direction:column; gap:10px;}
+.admin-item-block{background:var(--surface); border:1.3px solid var(--line); border-radius:10px; padding:12px 14px; cursor:default;}
+.admin-item-block.dragging{opacity:.4;}
+.admin-item-block.drag-over{outline:2px dashed var(--accent); outline-offset:-2px;}
+.admin-item-head{display:flex; align-items:center; gap:8px; margin-bottom:8px;}
+.admin-item-head .drag-handle{cursor:grab; font-size:15px; color:var(--ink-faint); flex:none;}
+.item-name-input{flex:1; font-size:14px; font-weight:800; padding:7px 9px; border:1.3px solid var(--line-strong); border-radius:7px; min-width:120px;}
+.subcat-select{padding:6px 8px; font-size:11.5px; border:1px solid var(--line-strong); border-radius:6px; flex:none;}
+.item-vat-toggle{font-size:11px; color:var(--ink-dim); display:flex; align-items:center; gap:4px; flex:none; white-space:nowrap;}
+.variant-table-wrap{overflow-x:auto;}
+.variant-table{width:100%; border-collapse:collapse; font-size:12px;}
+.variant-table th{text-align:left; font-size:10px; color:var(--ink-faint); padding:4px 5px; white-space:nowrap; border-bottom:1px solid var(--line);}
+.variant-table td{padding:3px 5px; vertical-align:middle;}
+.variant-table input[type="text"]{padding:5px 6px; border:1px solid var(--line-strong); border-radius:5px; font-size:11.5px; width:100%; min-width:70px;}
+.variant-table .variant-label-input{min-width:110px; font-weight:700;}
+.variant-table .cost-input{width:80px; min-width:80px;}
+.variant-table .margin-input{width:52px; min-width:52px;}
+.variant-table .final-price{font-weight:700;}
+.variant-add-btn{margin-top:6px; padding:6px 12px; font-size:11.5px;}
 .move-bar-hint{flex:1; min-width:220px; font-size:11.5px; color:var(--ink-faint);}
 .move-target-select{padding:8px 10px; border:1.3px solid var(--line-strong); border-radius:8px; font-size:12.5px;}
 .btn-reorder{flex:1; padding:4px 0; font-size:11px; border:1px solid var(--line-strong); border-radius:5px; background:var(--surface); color:var(--ink-dim);}
 .btn-reorder:disabled{opacity:.3;}
 .btn-reorder:not(:disabled):hover{background:var(--accent-soft); border-color:var(--accent);}
 table.admin-table .col-final{width:110px; text-align:right; font-weight:700;}
+table.admin-table .col-vat{width:56px; text-align:center;}
 .cost-input{
   width:88px; padding:5px 7px; border:1.3px solid var(--line-strong); border-radius:6px;
   text-align:right; font-size:12.5px; background:#fff;
@@ -796,6 +816,7 @@ const state = {
   marginOverride: {},// key group -> number (0~1), category-level margin override
   meta: { project:"", customer:"", date: new Date().toISOString().slice(0,10), quoteType:"turnkey" }, // quoteType: "turnkey"(턴키) | "direct"(직영)
   selected: {},       // key `${group}|${i}` -> true  (체크리스트에서 선택된 항목)
+  selectedVariant: {}, // key `${group}|${i}` -> 하위그룹 인덱스 (미지정 시 기본값 사용)
   phase: "picker",    // "picker" | "select" | "build"  (견적 작성 진행 단계)
   flow: null,         // "solo" | "consult"  (혼자 작업 / 고객 상담 모드)
   selectIdx: 0,       // (미사용 - 이전 버전 호환용)
@@ -841,26 +862,47 @@ function lineAmt(price, q){ return (price||0) * (q||0); }
 function pct(m){ return (Math.round(m*1000)/10); } // 0.25 -> 25 (for % input display, 1 decimal precision)
 
 /* ============ Pricing engine ============ */
-function effItem(group, i){
+/* 품목(item) 하나는 이제 { n, subcat, vatRequired, defaultIdx, variants:[{label,u,mat,labor,exp,mp,lp,ep,mo}] } 구조.
+   과거(마이그레이션 전) 데이터가 남아있을 경우를 대비해 flat 구조도 함께 인식한다. */
+function itemVariants(rawItem){
+  if(!rawItem) return [];
+  if(Array.isArray(rawItem.variants)) return rawItem.variants;
+  // 과거 flat 구조 호환: 그 자체를 variants 1개짜리로 취급
+  return [{ label: rawItem.s||'기본', u: rawItem.u, mat: rawItem.mat, labor: rawItem.labor, exp: rawItem.exp, mp: rawItem.mp, lp: rawItem.lp, ep: rawItem.ep, mo: rawItem.mo }];
+}
+function itemDefaultVariantIdx(rawItem){
+  if(!rawItem) return 0;
+  const idx = rawItem.defaultIdx;
+  const variants = itemVariants(rawItem);
+  return (idx!==undefined && idx!==null && idx < variants.length) ? idx : 0;
+}
+function effItem(group, i, variantIdx){
   const orig = CATALOG[group].items[i];
-  const ov = state.priceOverride[group+"|"+i] || {};
+  if(!orig) return { n:'', s:'', u:'', mat:undefined, mp:-2, labor:undefined, lp:-3, exp:undefined, ep:-3, mo:undefined, subcat:'', vatRequired:false };
+  const variants = itemVariants(orig);
+  const vi = (variantIdx!==undefined && variantIdx!==null && variantIdx<variants.length) ? variantIdx : itemDefaultVariantIdx(orig);
+  const v = variants[vi] || variants[0] || {};
   return {
-    n: ov.n !== undefined ? ov.n : orig.n,
-    s: ov.s !== undefined ? ov.s : orig.s,
-    u: ov.u !== undefined ? ov.u : orig.u,
-    mat: ov.mat !== undefined ? ov.mat : orig.mat,
-    mp: orig.mp || -2,
-    labor: ov.labor !== undefined ? ov.labor : orig.labor,
-    lp: orig.lp || -3,
-    exp: ov.exp !== undefined ? ov.exp : orig.exp,
-    ep: orig.ep || -3,
-    mo: ov.mo !== undefined ? ov.mo : orig.mo,
-    subcat: ov.subcat !== undefined ? ov.subcat : '',
+    n: orig.n,
+    s: v.label || '',
+    u: v.u,
+    mat: v.mat,
+    mp: v.mp || -2,
+    labor: v.labor,
+    lp: v.lp || -3,
+    exp: v.exp,
+    ep: v.ep || -3,
+    mo: v.mo,
+    subcat: orig.subcat || '',
+    vatRequired: !!orig.vatRequired,
+    variantIdx: vi,
+    variantCount: variants.length,
   };
 }
 /* 이 견적서에서만 적용되는 단가·마진 조정 (서버 기본 단가표는 그대로 유지) */
 function effItemQ(group, i){
-  const base = effItem(group, i);
+  const vIdx = (state.selectedVariant && state.selectedVariant[group+"|"+i] !== undefined) ? state.selectedVariant[group+"|"+i] : undefined;
+  const base = effItem(group, i, vIdx);
   if(state.mode !== 'quote') return base; // 설정(admin) 화면에서는 항상 기본값만 보여줌
   const ov = state.quoteItemOverride[group+"|"+i];
   if(!ov) return base;
@@ -880,7 +922,7 @@ function orderedItemIndices(group){
   const rank = (i)=>{
     const sc = effItem(group,i).subcat;
     const r = SUBCAT_ORDER.indexOf(sc);
-    return r === -1 ? SUBCAT_ORDER.indexOf("기타") : r;
+    return r === -1 ? SUBCAT_ORDER.length : r; // 미지정은 맨 아래로
   };
   return idxs.slice().sort((a,b)=> rank(a)-rank(b) || a-b);
 }
@@ -934,6 +976,7 @@ function priceOverrideToDbRow(group, i){
     spec: ov.s !== undefined ? ov.s : null,
     unit: ov.u !== undefined ? ov.u : null,
     subcat: ov.subcat !== undefined ? ov.subcat : null,
+    vat_required: ov.vatRequired !== undefined ? ov.vatRequired : null,
   };
 }
 function savePriceOverrideToServer(group, i){
@@ -983,6 +1026,7 @@ async function loadLivePricing(){
     if(r.spec !== null) o.s = r.spec;
     if(r.unit !== null) o.u = r.unit;
     if(r.subcat !== null) o.subcat = r.subcat;
+    if(r.vat_required !== null) o.vatRequired = r.vat_required;
     priceOverride[r.item_key] = o;
   });
   const marginOverride = {};
@@ -1166,6 +1210,21 @@ function groupSum(group){
 }
 
 /* ============ Totals ============ */
+function computeItemVatBase(){
+  // 직영공사에서 "직영 VAT" 체크된 항목들의 금액 합 (마진 0 원가 기준)
+  let sum = 0;
+  CAT_ORDER.forEach(cid=>{
+    CAT_GROUPS[cid].forEach(group=>{
+      CATALOG[group].items.forEach((raw,i)=>{
+        const st = getQty(group,i);
+        if(st.q>0 && effItemQ(group,i).vatRequired){
+          sum += lineAmt(rowDisplayPrice(group,i), st.q);
+        }
+      });
+    });
+  });
+  return sum;
+}
 function computeTotals(){
   let basicDirect = 0, optionDirect = 0;
   const byCat = {};
@@ -1206,9 +1265,12 @@ function computeTotals(){
       : (Number(cfg.adminFeeValue)||0);
     const subtotal = directTotal + serviceFee + adminFee;
     const vatOnFee = (state.meta.directVatOnFee !== undefined) ? state.meta.directVatOnFee : (state.quoteConfig.vatOnFeeDefault !== false);
-    const vat = vatOnFee ? serviceFee * VAT : 0;
+    const feeVat = vatOnFee ? serviceFee * VAT : 0;
+    const itemVatBase = computeItemVatBase();
+    const itemVat = itemVatBase * VAT;
+    const vat = feeVat + itemVat;
     const grand = subtotal + vat;
-    return {basicDirect, optionDirect, directTotal, serviceFee, adminFee, indirectTotal:serviceFee+adminFee, subtotal, vat, vatOnFee, grand, byCat, isDirect:true};
+    return {basicDirect, optionDirect, directTotal, serviceFee, adminFee, indirectTotal:serviceFee+adminFee, subtotal, vat, feeVat, itemVat, itemVatBase, vatOnFee, grand, byCat, isDirect:true};
   }
 
   const indGen = directTotal * IND_GEN;
@@ -1230,7 +1292,7 @@ function saveDraft(){
   try{
     localStorage.setItem(STORAGE_DRAFT, JSON.stringify({
       qty: state.qty, custom: state.custom,
-      meta: state.meta, selected: state.selected, phase: state.phase, flow: state.flow, selectIdx: state.selectIdx, catView: state.catView,
+      meta: state.meta, selected: state.selected, selectedVariant: state.selectedVariant, phase: state.phase, flow: state.flow, selectIdx: state.selectIdx, catView: state.catView,
       customerId: state.customerId, currentQuoteId: state.currentQuoteId,
       carpenterDaysOverride: state.carpenterDaysOverride, quoteItemOverride: state.quoteItemOverride, quoteAdjustMode: state.quoteAdjustMode, productPickMode: state.productPickMode,
     }));
@@ -1245,6 +1307,7 @@ function loadDraft(){
     state.custom = obj.custom || {};
     state.meta = Object.assign(state.meta, obj.meta || {});
     state.selected = obj.selected || {};
+    state.selectedVariant = obj.selectedVariant || {};
     state.phase = obj.phase || (Object.keys(state.qty).length ? 'build' : 'picker');
     state.flow = obj.flow || null;
     state.selectIdx = obj.selectIdx || 0;
@@ -1290,7 +1353,7 @@ async function saveCurrentAsSnapshot(label, forceNew){
     snapshot: {
       qty: state.qty, custom: state.custom,
       priceOverride: state.priceOverride, marginOverride: state.marginOverride,
-      meta: state.meta, selected: state.selected, carpenterDaysOverride: state.carpenterDaysOverride, quoteItemOverride: state.quoteItemOverride,
+      meta: state.meta, selected: state.selected, selectedVariant: state.selectedVariant, carpenterDaysOverride: state.carpenterDaysOverride, quoteItemOverride: state.quoteItemOverride,
     },
   };
   const { error } = await sb.from('quotes').upsert(row);
@@ -1311,6 +1374,7 @@ async function loadSnapshot(id){
   if(!state.meta.quoteType) state.meta.quoteType = 'turnkey';
   updateQuoteTypeSwitch();
   state.selected = d.selected || {};
+  state.selectedVariant = d.selectedVariant || {};
   state.carpenterDaysOverride = d.carpenterDaysOverride || {};
   state.quoteItemOverride = d.quoteItemOverride || {};
   if(selectedCountAll()===0) backfillSelectedFromQty();
@@ -1348,18 +1412,6 @@ function renderNav(){
   }
   const t = computeTotals();
   $nav.innerHTML = '';
-  if(state.mode === 'admin'){
-    const cfgBtn = document.createElement('button');
-    cfgBtn.className = 'nav-item' + (state.active==='config' ? ' active':'');
-    cfgBtn.innerHTML = '<span class="idx">⚙</span><span>직영공사 수수료</span>';
-    cfgBtn.onclick = ()=>{ state.active = 'config'; renderAll(); window.scrollTo(0,0); };
-    $nav.appendChild(cfgBtn);
-    const prodBtn = document.createElement('button');
-    prodBtn.className = 'nav-item' + (state.active==='products' ? ' active':'');
-    prodBtn.innerHTML = '<span class="idx">📦</span><span>제품 카탈로그</span>';
-    prodBtn.onclick = ()=>{ state.active = 'products'; renderAll(); window.scrollTo(0,0); };
-    $nav.appendChild(prodBtn);
-  }
   CAT_ORDER.forEach(cid=>{
     const meta = CAT_META[cid];
     const btn = document.createElement('button');
@@ -1857,10 +1909,17 @@ function itemRowHTML(group, i){
   const productPicker = (state.productPickMode && groupProducts.length>0)
     ? '<select class="product-pick-select" data-role="product-pick" data-group="'+group+'" data-i="'+i+'"><option value="">제품에서 선택…</option>'+groupProducts.map(p=>'<option value="'+p.id+'">'+escapeHtml(p.name)+(p.spec?' · '+escapeHtml(p.spec):'')+'</option>').join('')+'</select>'
     : '';
+  const rawItem = CATALOG[group].items[i];
+  const variants = itemVariants(rawItem);
+  const variantPicker = variants.length > 1
+    ? '<select class="variant-pick-select" data-role="variant-pick" data-group="'+group+'" data-i="'+i+'">'+
+        variants.map((v,vi)=>'<option value="'+vi+'" '+(vi===it.variantIdx?'selected':'')+'>'+escapeHtml(v.label||'(이름없음)')+'</option>').join('')+
+      '</select>'
+    : '';
   return ''+
   '<tr class="'+(st.q>0?'has-qty':'')+(adj?' qadjust-row':'')+'">'+
     '<td class="col-idx num">'+(i+1)+'</td>'+
-    '<td class="col-name"><div class="item-name">'+escapeHtml(it.n)+'</div>'+(it.s?'<div class="item-spec">'+escapeHtml(it.s)+'</div>':'')+(adj?'<div class="item-spec">개별 마진율 '+marginCell+' %</div>':'')+productPicker+'</td>'+
+    '<td class="col-name"><div class="item-name">'+escapeHtml(it.n)+'</div>'+variantPicker+(!variantPicker && it.s?'<div class="item-spec">'+escapeHtml(it.s)+'</div>':'')+(adj?'<div class="item-spec">개별 마진율 '+marginCell+' %</div>':'')+productPicker+'</td>'+
     '<td class="col-unit">'+escapeHtml(it.u)+'</td>'+
     '<td class="col-cost num">'+costCell(parts.mat,'mat')+'</td>'+
     '<td class="col-cost num">'+costCell(parts.labor,'labor')+'</td>'+
@@ -1991,35 +2050,6 @@ function allGroupOptions(){
     });
   });
   return opts;
-}
-function adminRowHTML(group, i){
-  const it = effItem(group, i);
-  const price = computePrice(group, i);
-  const subcatCell = group==="2" ? '<td class="col-subcat"><select data-role="subcat-edit" data-group="'+group+'" data-i="'+i+'">'+
-    '<option value="">(미지정)</option>'+
-    SUBCAT_ORDER.map(sc=>'<option value="'+sc+'" '+(it.subcat===sc?'selected':'')+'>'+sc+'</option>').join('')+
-    '</select></td>' : '';
-  const checked = !!state.adminMoveSelected[group+"|"+i];
-  const dragCell = '<td class="col-drag">'+
-    '<span class="drag-handle" title="드래그해서 순서 변경 (같은 소분류 안에서 순서가 정해져요)">⋮⋮</span>'+
-    '<input type="checkbox" class="move-check" data-role="move-check" data-group="'+group+'" data-i="'+i+'" '+(checked?'checked':'')+' title="이동할 항목으로 선택">'+
-  '</td>';
-  return ''+
-  '<tr draggable="true" data-group="'+group+'" data-i="'+i+'">'+
-    dragCell+
-    '<td class="col-idx num">'+(i+1)+'</td>'+
-    '<td class="col-name">'+
-      '<input type="text" class="name-input" value="'+escapeHtml(it.n)+'" placeholder="품명 입력" data-role="name-edit" data-group="'+group+'" data-i="'+i+'">'+
-      '<input type="text" class="spec-input" value="'+escapeHtml(it.s)+'" placeholder="규격 (선택)" data-role="spec-edit" data-group="'+group+'" data-i="'+i+'">'+
-    '</td>'+
-    subcatCell+
-    '<td class="col-unit"><input type="text" class="unit-input" value="'+escapeHtml(it.u)+'" placeholder="단위" data-role="unit-edit" data-group="'+group+'" data-i="'+i+'"></td>'+
-    '<td class="col-cost">'+costCellHTML(group,i,'mat',it.mat,'재료비')+'</td>'+
-    '<td class="col-cost">'+costCellHTML(group,i,'labor',it.labor,'노무비')+'</td>'+
-    '<td class="col-cost">'+costCellHTML(group,i,'exp',it.exp,'경비')+'</td>'+
-    '<td class="col-margin"><input type="number" class="cost-input num margin-input" step="1" value="'+(it.mo!==undefined&&it.mo!==null? pct(it.mo):'')+'" placeholder="기본" data-role="item-margin" data-group="'+group+'" data-i="'+i+'" onfocus="this.select()"> %</td>'+
-    '<td class="col-final num"><span class="final-price">'+(price>0? won(price):'')+'</span></td>'+
-  '</tr>';
 }
 /* ============ 전자계약(서명) ============ */
 function renderCtPaymentRows(){
@@ -2214,27 +2244,13 @@ function renderContractForm(){
 
 
 function getGroupPairs(group){
-  return CATALOG[group].items.map((item,i)=>({item, override: state.priceOverride[group+"|"+i]}));
+  return CATALOG[group].items.map(item=>({item}));
 }
 function setGroupPairs(group, pairs){
-  const copy = pairs.slice();
-  while(copy.length < 60) copy.push({item:{n:'',s:'',u:''}, override:undefined});
-  copy.length = 60;
-  CATALOG[group].items = copy.map(p=>p.item);
-  Object.keys(state.priceOverride).forEach(k=>{ if(k.startsWith(group+"|")) delete state.priceOverride[k]; });
-  copy.forEach((p,i)=>{ if(p.override) state.priceOverride[group+"|"+i] = p.override; });
-}
-function trimTrailingBlanks(pairs){
-  const copy = pairs.slice();
-  while(copy.length && !copy[copy.length-1].item.n) copy.pop();
-  return copy;
+  CATALOG[group].items = pairs.map(p=>p.item);
 }
 async function saveGroupFullToServer(group){
   await sb.from('catalog_groups').upsert({ group_id: group, label: CATALOG[group].label, margin: CATALOG[group].margin, items: CATALOG[group].items });
-  await sb.from('price_overrides').delete().like('item_key', group+'|%');
-  const rows = [];
-  for(let i=0;i<60;i++){ if(state.priceOverride[group+"|"+i]) rows.push(priceOverrideToDbRow(group,i)); }
-  if(rows.length) await sb.from('price_overrides').upsert(rows);
 }
 async function moveCheckedItemsForCurrentView(toGroup){
   const groups = CAT_GROUPS[state.active] || [state.active];
@@ -2246,19 +2262,19 @@ async function moveCheckedItemsForCurrentView(toGroup){
 }
 function bindDragReorder(){
   let dragSrc = null;
-  $main.querySelectorAll('tr[draggable="true"]').forEach(tr=>{
-    tr.addEventListener('dragstart', ()=>{
-      dragSrc = { group: tr.dataset.group, i: parseInt(tr.dataset.i,10) };
-      tr.classList.add('dragging');
+  $main.querySelectorAll('.admin-item-block[draggable="true"]').forEach(block=>{
+    block.addEventListener('dragstart', ()=>{
+      dragSrc = { group: block.dataset.group, i: parseInt(block.dataset.i,10) };
+      block.classList.add('dragging');
     });
-    tr.addEventListener('dragend', ()=>{ tr.classList.remove('dragging'); });
-    tr.addEventListener('dragover', e=>{ e.preventDefault(); tr.classList.add('drag-over'); });
-    tr.addEventListener('dragleave', ()=>{ tr.classList.remove('drag-over'); });
-    tr.addEventListener('drop', async e=>{
+    block.addEventListener('dragend', ()=>{ block.classList.remove('dragging'); });
+    block.addEventListener('dragover', e=>{ e.preventDefault(); block.classList.add('drag-over'); });
+    block.addEventListener('dragleave', ()=>{ block.classList.remove('drag-over'); });
+    block.addEventListener('drop', async e=>{
       e.preventDefault();
-      tr.classList.remove('drag-over');
+      block.classList.remove('drag-over');
       if(!dragSrc) return;
-      const targetGroup = tr.dataset.group, targetI = parseInt(tr.dataset.i,10);
+      const targetGroup = block.dataset.group, targetI = parseInt(block.dataset.i,10);
       if(dragSrc.group !== targetGroup || dragSrc.i === targetI){ dragSrc = null; return; }
       await moveWithinGroup(targetGroup, dragSrc.i, targetI);
       dragSrc = null;
@@ -2277,18 +2293,13 @@ async function moveWithinGroup(group, fromIndex, toIndex){
 async function moveCheckedItemsToCategory(fromGroup, toGroup){
   const pairs = getGroupPairs(fromGroup);
   const selectedIdxs = [];
-  pairs.forEach((p,i)=>{ if(state.adminMoveSelected[fromGroup+"|"+i] && p.item.n) selectedIdxs.push(i); });
-  if(selectedIdxs.length===0){ alert('이동할 항목을 먼저 체크해 주세요.'); return; }
-  let toPairs = trimTrailingBlanks(getGroupPairs(toGroup));
-  if(toPairs.length + selectedIdxs.length > 60){
-    alert('"'+CATALOG[toGroup].label+'" 공종에 자리가 부족해요. (남은 자리 '+(60-toPairs.length)+'칸, 이동하려는 항목 '+selectedIdxs.length+'개)');
-    return;
-  }
-  if(!confirm(selectedIdxs.length+'개 항목을 "'+CATALOG[toGroup].label+'"(으)로 이동할까요?')) return;
+  pairs.forEach((p,i)=>{ if(state.adminMoveSelected[fromGroup+"|"+i]) selectedIdxs.push(i); });
+  if(selectedIdxs.length===0){ alert('이동할 품목을 먼저 체크해 주세요.'); return; }
+  if(!confirm(selectedIdxs.length+'개 품목을 "'+CATALOG[toGroup].label+'"(으)로 이동할까요?')) return;
   const movedItems = selectedIdxs.map(i=>pairs[i]);
   const remaining = pairs.filter((p,i)=>!selectedIdxs.includes(i));
   setGroupPairs(fromGroup, remaining);
-  toPairs = toPairs.concat(movedItems);
+  const toPairs = getGroupPairs(toGroup).concat(movedItems);
   setGroupPairs(toGroup, toPairs);
   selectedIdxs.forEach(i=>{ delete state.adminMoveSelected[fromGroup+"|"+i]; });
   await Promise.all([saveGroupFullToServer(fromGroup), saveGroupFullToServer(toGroup)]);
@@ -2315,33 +2326,78 @@ function windowPositionsAdminHTML(){
   '</div>';
 }
 function adminTableHTML(group){
-  const rows = orderedItemIndices(group).map(i=>adminRowHTML(group,i)).join('');
   const margin = categoryMargin(group);
-  const subcatHead = group==="2" ? '<th class="col-subcat">소분류</th>' : '';
   const moveOpts = allGroupOptions().filter(o=>o.group!==group).map(o=>'<option value="'+o.group+'">'+o.label+'</option>').join('');
+  const items = CATALOG[group].items;
+  const rows = items.map((it,i)=>adminItemBlockHTML(group,i)).join('');
   return ''+
   (group==="3" ? windowPositionsAdminHTML() : '')+
   '<div class="margin-box" id="marginbox-'+group+'">'+
     '<div class="margin-box-label">'+escapeHtml(CATALOG[group].label)+' — 기본 마진율</div>'+
     '<div class="margin-box-row">'+
       '<input type="number" class="margin-cat-input num" step="1" value="'+pct(margin)+'" data-role="cat-margin" data-group="'+group+'"> %'+
-      '<span class="margin-box-hint">개별 항목에 마진율을 따로 입력하지 않으면 이 값이 적용됩니다. 빈 칸은 아직 등록되지 않은 항목이며, 품명과 단가를 입력하면 견적 작성 탭에 자동으로 나타납니다.</span>'+
+      '<span class="margin-box-hint">개별 하위그룹에 마진율을 따로 입력하지 않으면 이 값이 적용됩니다.</span>'+
       '<button class="btn-primary btn-reset-group" id="save-group-btn-'+group+'" data-role="save-group" data-group="'+group+'">저장</button>'+
     '</div>'+
   '</div>'+
   '<div class="move-bar">'+
-    '<span class="move-bar-hint">왼쪽 ⋮⋮ 를 드래그하면 순서가 바뀌고, 체크박스로 여러 항목을 골라 다른 공종으로 옮길 수 있어요.</span>'+
+    '<span class="move-bar-hint">품목을 드래그하면 순서가 바뀌고, 체크박스로 여러 품목을 골라 다른 공종으로 옮길 수 있어요.</span>'+
     '<select id="move-target-select" class="move-target-select"><option value="">이동할 공종 선택…</option>'+moveOpts+'</select>'+
     '<button class="btn-secondary" id="move-selected-btn" style="flex:none;padding:8px 14px;">선택 항목 이동</button>'+
   '</div>'+
-  '<table class="items admin-table">'+
-    '<thead><tr>'+
-      '<th class="col-drag"></th><th class="col-idx">No</th><th class="col-name">품명 / 규격</th>'+subcatHead+'<th class="col-unit">단위</th>'+
-      '<th class="col-cost">재료비</th><th class="col-cost">노무비</th><th class="col-cost">경비</th>'+
-      '<th class="col-margin">개별 마진율</th><th class="col-final">최종 단가</th>'+
-    '</tr></thead>'+
-    '<tbody id="admin-tbody-'+group+'">'+rows+'</tbody>'+
-  '</table>';
+  '<div id="admin-items-'+group+'" class="admin-item-list">'+rows+'</div>'+
+  '<button class="btn-secondary" id="add-item-btn-'+group+'" data-role="add-item" data-group="'+group+'" style="margin-top:14px;">+ 새 품목 추가</button>';
+}
+function adminItemBlockHTML(group, i){
+  const raw = CATALOG[group].items[i];
+  const variants = itemVariants(raw);
+  const defaultIdx = itemDefaultVariantIdx(raw);
+  const checked = !!state.adminMoveSelected[group+"|"+i];
+  const subcatCell = group==="2" ? '<select class="subcat-select" data-role="subcat-edit" data-group="'+group+'" data-i="'+i+'">'+
+    '<option value="">(소분류 미지정)</option>'+
+    SUBCAT_ORDER.map(sc=>'<option value="'+sc+'" '+(raw.subcat===sc?'selected':'')+'>'+sc+'</option>').join('')+
+    '</select>' : '';
+  return '<div class="admin-item-block" draggable="true" data-group="'+group+'" data-i="'+i+'">'+
+    '<div class="admin-item-head">'+
+      '<span class="drag-handle" title="드래그해서 순서 변경">⋮⋮</span>'+
+      '<input type="checkbox" class="move-check" data-role="move-check" data-group="'+group+'" data-i="'+i+'" '+(checked?'checked':'')+' title="이동할 품목으로 선택">'+
+      '<input type="text" class="item-name-input" data-role="item-name-edit" data-group="'+group+'" data-i="'+i+'" value="'+escapeHtml(raw.n||'')+'" placeholder="품명">'+
+      subcatCell+
+      '<label class="item-vat-toggle"><input type="checkbox" data-role="item-vat-edit" data-group="'+group+'" data-i="'+i+'" '+(raw.vatRequired?'checked':'')+'> 직영 VAT</label>'+
+      '<button class="btn-remove" data-role="item-del" data-group="'+group+'" data-i="'+i+'" title="이 품목 전체 삭제">×</button>'+
+    '</div>'+
+    '<div class="variant-table-wrap">'+
+      '<table class="variant-table"><thead><tr><th>기본값</th><th>하위그룹명</th><th>단위</th><th>재료비</th><th>노무비</th><th>경비</th><th>개별마진율</th><th>최종단가</th><th></th></tr></thead>'+
+      '<tbody>'+variants.map((v,vi)=>variantRowHTML(group,i,vi,v,vi===defaultIdx)).join('')+'</tbody></table>'+
+      '<button class="btn-secondary variant-add-btn" data-role="add-variant" data-group="'+group+'" data-i="'+i+'">+ 하위그룹 추가</button>'+
+    '</div>'+
+  '</div>';
+}
+function variantRowHTML(group, i, vi, v, isDefault){
+  const price = computeVariantPrice(group, i, vi);
+  return '<tr>'+
+    '<td class="num"><input type="radio" name="default-'+group+'-'+i+'" data-role="variant-default" data-group="'+group+'" data-i="'+i+'" data-vi="'+vi+'" '+(isDefault?'checked':'')+'></td>'+
+    '<td><input type="text" class="variant-label-input" data-role="variant-field" data-field="label" data-group="'+group+'" data-i="'+i+'" data-vi="'+vi+'" value="'+escapeHtml(v.label||'')+'" placeholder="예: 행위허가"></td>'+
+    '<td><input type="text" class="variant-unit-input" data-role="variant-field" data-field="u" data-group="'+group+'" data-i="'+i+'" data-vi="'+vi+'" value="'+escapeHtml(v.u||'')+'" placeholder="단위"></td>'+
+    '<td>'+variantCostCellHTML(group,i,vi,'mat',v.mat,'재료비')+'</td>'+
+    '<td>'+variantCostCellHTML(group,i,vi,'labor',v.labor,'노무비')+'</td>'+
+    '<td>'+variantCostCellHTML(group,i,vi,'exp',v.exp,'경비')+'</td>'+
+    '<td><input type="number" class="cost-input num margin-input" step="1" value="'+(v.mo!==undefined&&v.mo!==null?pct(v.mo):'')+'" placeholder="기본" data-role="variant-margin" data-group="'+group+'" data-i="'+i+'" data-vi="'+vi+'" onfocus="this.select()"> %</td>'+
+    '<td class="num"><span class="final-price">'+(price>0?won(price):'')+'</span></td>'+
+    '<td><button class="btn-remove" data-role="variant-del" data-group="'+group+'" data-i="'+i+'" data-vi="'+vi+'" title="하위그룹 삭제">×</button></td>'+
+  '</tr>';
+}
+function variantCostCellHTML(group, i, vi, field, value, placeholder){
+  return '<input type="text" inputmode="numeric" class="cost-input num money-input" value="'+fmtNum(value)+'" placeholder="'+placeholder+'" data-role="variant-field" data-field="'+field+'" data-group="'+group+'" data-i="'+i+'" data-vi="'+vi+'" onfocus="this.select()">';
+}
+function computeVariantPrice(group, i, vi){
+  const it = effItem(group, i, vi);
+  const m = (it.mo !== undefined && it.mo !== null) ? it.mo : categoryMargin(group);
+  let total = 0;
+  if(it.mat !== undefined && it.mat !== null) total += roundUp(it.mat * (1+m), it.mp);
+  if(it.labor !== undefined && it.labor !== null) total += roundUp(it.labor * (1+m), it.lp);
+  if(it.exp !== undefined && it.exp !== null) total += roundUp(it.exp * (1+m), it.ep);
+  return Math.round(total);
 }
 
 /* ============ Main render ============ */
@@ -2463,6 +2519,15 @@ function bindMainEvents(){
         renderMain();
       });
     });
+    $main.querySelectorAll('[data-role="variant-pick"]').forEach(el=>{
+      el.addEventListener('change', e=>{
+        const group = e.target.dataset.group, i = parseInt(e.target.dataset.i,10);
+        state.selectedVariant = state.selectedVariant || {};
+        state.selectedVariant[group+"|"+i] = parseInt(e.target.value,10);
+        saveDraft();
+        renderMain();
+      });
+    });
     $main.querySelectorAll('[data-role="c-qty"]').forEach(el=>{
       el.addEventListener('input', e=>{
         const group = e.target.dataset.group, id = e.target.dataset.id;
@@ -2557,29 +2622,103 @@ function bindMainEvents(){
         renderMain();
       });
     });
-    $main.querySelectorAll('[data-role="name-edit"]').forEach(el=>{
+    $main.querySelectorAll('[data-role="item-name-edit"]').forEach(el=>{
       el.addEventListener('input', e=>{
-        setPriceField(e.target.dataset.group, parseInt(e.target.dataset.i,10), 'n', e.target.value);
-        saveDraft();
-      });
-    });
-    $main.querySelectorAll('[data-role="spec-edit"]').forEach(el=>{
-      el.addEventListener('input', e=>{
-        setPriceField(e.target.dataset.group, parseInt(e.target.dataset.i,10), 's', e.target.value);
-        saveDraft();
-      });
-    });
-    $main.querySelectorAll('[data-role="unit-edit"]').forEach(el=>{
-      el.addEventListener('input', e=>{
-        setPriceField(e.target.dataset.group, parseInt(e.target.dataset.i,10), 'u', e.target.value);
-        saveDraft();
+        const group = e.target.dataset.group, i = parseInt(e.target.dataset.i,10);
+        CATALOG[group].items[i].n = e.target.value;
+        markGroupDirty(group);
       });
     });
     $main.querySelectorAll('[data-role="subcat-edit"]').forEach(el=>{
       el.addEventListener('change', e=>{
-        setPriceField(e.target.dataset.group, parseInt(e.target.dataset.i,10), 'subcat', e.target.value);
-        saveDraft();
+        const group = e.target.dataset.group, i = parseInt(e.target.dataset.i,10);
+        CATALOG[group].items[i].subcat = e.target.value;
+        markGroupDirty(group);
         renderMain(); // 정렬 순서가 바뀌므로 다시 그림
+      });
+    });
+    $main.querySelectorAll('[data-role="item-vat-edit"]').forEach(el=>{
+      el.addEventListener('change', e=>{
+        const group = e.target.dataset.group, i = parseInt(e.target.dataset.i,10);
+        CATALOG[group].items[i].vatRequired = e.target.checked;
+        markGroupDirty(group);
+      });
+    });
+    $main.querySelectorAll('[data-role="item-del"]').forEach(el=>{
+      el.addEventListener('click', async e=>{
+        const group = e.target.dataset.group, i = parseInt(e.target.dataset.i,10);
+        const nm = CATALOG[group].items[i].n || '(이름 없음)';
+        if(!confirm('"'+nm+'" 품목을 삭제할까요? 하위그룹도 전부 함께 삭제돼요.')) return;
+        CATALOG[group].items.splice(i,1);
+        await saveGroupFullToServer(group);
+        renderMain();
+      });
+    });
+    $main.querySelectorAll('[data-role="add-item"]').forEach(el=>{
+      el.addEventListener('click', async e=>{
+        const group = e.target.dataset.group;
+        CATALOG[group].items.push({ n:'새 품목', subcat:'', vatRequired:false, defaultIdx:0,
+          variants:[{label:'기본', u:'식', mat:0, labor:0, exp:0, mp:-2, lp:-3, ep:-3, mo:undefined}] });
+        await saveGroupFullToServer(group);
+        renderMain();
+      });
+    });
+    $main.querySelectorAll('[data-role="add-variant"]').forEach(el=>{
+      el.addEventListener('click', async e=>{
+        const group = e.target.dataset.group, i = parseInt(e.target.dataset.i,10);
+        itemVariants(CATALOG[group].items[i]).push({label:'새 하위그룹', u:'식', mat:0, labor:0, exp:0, mp:-2, lp:-3, ep:-3, mo:undefined});
+        if(!Array.isArray(CATALOG[group].items[i].variants)){
+          // 과거 flat 구조였다면 이번에 변환
+          CATALOG[group].items[i] = { n:CATALOG[group].items[i].n, subcat:CATALOG[group].items[i].subcat||'', vatRequired:!!CATALOG[group].items[i].vatRequired, defaultIdx:0, variants:itemVariants(CATALOG[group].items[i]) };
+        }
+        await saveGroupFullToServer(group);
+        renderMain();
+      });
+    });
+    $main.querySelectorAll('[data-role="variant-del"]').forEach(el=>{
+      el.addEventListener('click', async e=>{
+        const group = e.target.dataset.group, i = parseInt(e.target.dataset.i,10), vi = parseInt(e.target.dataset.vi,10);
+        const item = CATALOG[group].items[i];
+        const variants = itemVariants(item);
+        if(variants.length<=1){ alert('하위그룹이 하나뿐이면 삭제할 수 없어요. (품목을 통째로 삭제하시려면 위쪽 × 버튼을 이용하세요)'); return; }
+        variants.splice(vi,1);
+        item.variants = variants;
+        if(item.defaultIdx >= variants.length) item.defaultIdx = 0;
+        await saveGroupFullToServer(group);
+        renderMain();
+      });
+    });
+    $main.querySelectorAll('[data-role="variant-default"]').forEach(el=>{
+      el.addEventListener('change', async e=>{
+        const group = e.target.dataset.group, i = parseInt(e.target.dataset.i,10), vi = parseInt(e.target.dataset.vi,10);
+        CATALOG[group].items[i].defaultIdx = vi;
+        markGroupDirty(group);
+      });
+    });
+    $main.querySelectorAll('[data-role="variant-field"]').forEach(el=>{
+      el.addEventListener('input', e=>{
+        const group = e.target.dataset.group, i = parseInt(e.target.dataset.i,10), vi = parseInt(e.target.dataset.vi,10), field = e.target.dataset.field;
+        const v = itemVariants(CATALOG[group].items[i])[vi];
+        if(field==='mat' || field==='labor' || field==='exp') v[field] = parseCommaNum(e.target.value);
+        else v[field] = e.target.value;
+        markGroupDirty(group);
+        const row = e.target.closest('tr');
+        const span = row.querySelector('.final-price');
+        if(span) span.textContent = won(computeVariantPrice(group,i,vi));
+        renderNav(); renderSummaryOnly();
+      });
+    });
+    $main.querySelectorAll('[data-role="variant-margin"]').forEach(el=>{
+      el.addEventListener('input', e=>{
+        const group = e.target.dataset.group, i = parseInt(e.target.dataset.i,10), vi = parseInt(e.target.dataset.vi,10);
+        const v = itemVariants(CATALOG[group].items[i])[vi];
+        const raw = e.target.value;
+        v.mo = raw === '' ? undefined : Number(raw)/100;
+        markGroupDirty(group);
+        const row = e.target.closest('tr');
+        const span = row.querySelector('.final-price');
+        if(span) span.textContent = won(computeVariantPrice(group,i,vi));
+        renderNav(); renderSummaryOnly();
       });
     });
     $main.querySelectorAll('[data-role="move-check"]').forEach(el=>{
@@ -2593,39 +2732,18 @@ function bindMainEvents(){
       moveBtn.addEventListener('click', async ()=>{
         const toGroup = document.getElementById('move-target-select').value;
         if(!toGroup){ alert('이동할 공종을 먼저 선택해 주세요.'); return; }
-        const fromGroup = state.active === "6" ? null : state.active; // 6은 6a/6b로 아래에서 처리
         moveBtn.disabled = true;
         await moveCheckedItemsForCurrentView(toGroup);
         moveBtn.disabled = false;
       });
     }
     bindDragReorder();
-    $main.querySelectorAll('[data-role="cost"]').forEach(el=>{
-      el.addEventListener('input', e=>{
-        const group = e.target.dataset.group, i = parseInt(e.target.dataset.i,10), field = e.target.dataset.field;
-        const v = parseCommaNum(e.target.value);
-        setPriceField(group, i, field, v);
-        updateFinalPriceCell(e.target.closest('tr'), group, i);
-        renderNav(); renderSummaryOnly();
-      });
-    });
-    $main.querySelectorAll('[data-role="item-margin"]').forEach(el=>{
-      el.addEventListener('input', e=>{
-        const group = e.target.dataset.group, i = parseInt(e.target.dataset.i,10);
-        const raw = e.target.value;
-        const v = raw === '' ? undefined : Number(raw)/100;
-        setPriceField(group, i, 'mo', v);
-        updateFinalPriceCell(e.target.closest('tr'), group, i);
-        renderNav(); renderSummaryOnly();
-      });
-    });
     $main.querySelectorAll('[data-role="cat-margin"]').forEach(el=>{
       el.addEventListener('input', e=>{
         const group = e.target.dataset.group;
         if(e.target.value === ''){ delete state.marginOverride[group]; }
         else { state.marginOverride[group] = Number(e.target.value)/100; }
-        state.pendingGroupSave = state.pendingGroupSave || {};
-        state.pendingGroupSave[group] = true;
+        markGroupDirty(group);
         refreshGroupFinalPrices(group);
         renderNav(); renderSummaryOnly();
       });
@@ -2635,18 +2753,17 @@ function bindMainEvents(){
         const group = e.target.dataset.group;
         const btn = e.target;
         btn.disabled = true; btn.textContent = '저장 중…';
-        const items = CATALOG[group].items;
-        const jobs = [saveCategoryMarginToServer(group)];
-        items.forEach((it,i)=>{
-          if(state.priceOverride[group+"|"+i]) jobs.push(savePriceOverrideToServer(group, i));
-        });
-        await Promise.all(jobs);
+        await Promise.all([saveCategoryMarginToServer(group), saveGroupFullToServer(group)]);
         if(state.pendingGroupSave) delete state.pendingGroupSave[group];
         btn.disabled = false; btn.textContent = '저장됨 ✓';
         setTimeout(()=>{ if(document.body.contains(btn)) btn.textContent = '저장'; }, 1500);
       });
     });
   }
+}
+function markGroupDirty(group){
+  state.pendingGroupSave = state.pendingGroupSave || {};
+  state.pendingGroupSave[group] = true;
 }
 function updateRowAmount(tr, price, q){
   const span = tr.querySelector('.amt-text');
@@ -2662,14 +2779,14 @@ function updateFinalPriceCell(tr, group, i){
   if(span) span.textContent = won(computePrice(group,i));
 }
 function refreshGroupFinalPrices(group){
-  $main.querySelectorAll('tr').forEach(tr=>{
-    const span = tr.querySelector('.final-price');
+  $main.querySelectorAll('.variant-table tr').forEach(row=>{
+    const span = row.querySelector('.final-price');
     if(!span) return;
-    const input = tr.querySelector('[data-role="cost"], [data-role="item-margin"]');
+    const input = row.querySelector('[data-role="variant-field"], [data-role="variant-margin"]');
     if(!input) return;
     if(input.dataset.group !== group) return;
-    const i = parseInt(input.dataset.i,10);
-    span.textContent = won(computePrice(group,i));
+    const i = parseInt(input.dataset.i,10), vi = parseInt(input.dataset.vi,10);
+    span.textContent = won(computeVariantPrice(group,i,vi));
   });
 }
 
@@ -2849,7 +2966,7 @@ function summaryHTML(){
     html += '<li class="strong">B. 간접공사비 소계<span class="amt">'+won(t.indirectTotal)+'</span></li>';
   }
   html += '<li class="strong">소계 (A+B)<span class="amt">'+won(t.subtotal)+'</span></li>';
-  html += '<li>'+(t.isDirect ? '부가가치세'+(t.vatOnFee?' (수수료 10%)':' (미포함)') : '부가가치세 (10%)')+'<span class="amt">'+won(t.vat)+'</span></li>';
+  html += '<li>'+(t.isDirect ? '부가가치세'+(((t.vatOnFee?1:0)+(t.itemVat>0?1:0))>1 ? ' (수수료+항목별)' : (t.vatOnFee?' (수수료 10%)':(t.itemVat>0?' (항목별)':' (미포함)'))) : '부가가치세 (10%)')+'<span class="amt">'+won(t.vat)+'</span></li>';
   html += '</ul>';
   html += '<div class="total-card"><div class="label">총 공사 견적 금액</div><div class="value">₩ '+won(t.grand)+'</div><div class="vat-note">부가가치세 포함 금액입니다</div></div>';
   html += '<div class="note-box">'+
@@ -3046,7 +3163,7 @@ function buildPrintView(){
       '<tr><td>'+(t.isDirect?'A. 실행원가 소계 (마진 0%)':'A. 직접공사비 소계')+'</td><td class="p-right">'+won(t.directTotal)+' 원</td></tr>'+
       '<tr><td>'+(t.isDirect?'B. 수수료+공정관리비 소계':'B. 간접공사비 소계 (관리비+잡비)')+'</td><td class="p-right">'+won(t.indirectTotal)+' 원</td></tr>'+
       '<tr><td>소계</td><td class="p-right">'+won(t.subtotal)+' 원</td></tr>'+
-      '<tr><td>'+(t.isDirect ? '부가가치세'+(t.vatOnFee?' (수수료 10%)':' (미포함)') : '부가가치세 (10%)')+'</td><td class="p-right">'+won(t.vat)+' 원</td></tr>'+
+      '<tr><td>'+(t.isDirect ? '부가가치세'+(((t.vatOnFee?1:0)+(t.itemVat>0?1:0))>1 ? ' (수수료+항목별)' : (t.vatOnFee?' (수수료 10%)':(t.itemVat>0?' (항목별)':' (미포함)'))) : '부가가치세 (10%)')+'</td><td class="p-right">'+won(t.vat)+' 원</td></tr>'+
       '<tr class="final"><td>총 계</td><td class="p-right">'+won(t.grand)+' 원</td></tr>'+
     '</tbody></table>'+
     '<div class="p-note">'+
@@ -3077,6 +3194,11 @@ document.addEventListener('input', e=>{
   const projectName = params.get('project_name');
   const quoteId = params.get('quote_id');
   EMBED_ADMIN_MODE = params.get('mode') === 'admin';
+  const activeParam = params.get('active');
+  if(EMBED_ADMIN_MODE && activeParam){
+    state.mode = 'admin';
+    state.active = activeParam; // 'config' | 'products' | 카테고리 번호
+  }
 
   bindMeta();
   bindModeSwitch();
