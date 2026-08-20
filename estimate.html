@@ -477,6 +477,15 @@ table.items tbody tr.has-qty:hover{background:#F8F0DC;}
 }
 .btn-remove:hover{background:rgba(156,59,46,.1);}
 .btn-copy-item{padding:4px 9px; font-size:10.5px; border-radius:5px; vertical-align:middle;}
+.cp-modal-backdrop{position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; z-index:300; padding:20px;}
+.cp-modal{background:var(--surface); border-radius:14px; padding:24px; max-width:380px; width:100%; position:relative; max-height:80vh; overflow-y:auto;}
+.cp-modal h3{margin:0 0 4px; font-size:16px;}
+.cp-modal-sub{font-size:12px; color:var(--ink-faint); margin-bottom:16px;}
+.cp-modal-close{position:absolute; top:14px; right:16px; background:none; border:none; font-size:20px; color:var(--ink-faint); cursor:pointer;}
+.cp-variant-list{display:flex; flex-direction:column; gap:8px;}
+.cp-variant-btn{display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border:1.3px solid var(--line-strong); border-radius:9px; background:var(--surface); font-size:13px; font-weight:700; text-align:left;}
+.cp-variant-btn:hover{border-color:var(--accent); background:var(--accent-soft);}
+.cp-variant-btn b{font-weight:800; color:var(--accent-deep);}
 
 /* ===== Summary panel ===== */
 .summary{
@@ -2034,11 +2043,38 @@ function variantUnitPrice(group, i, vi){
 function copyItemAsCustom(group, i){
   const rawItem = CATALOG[group].items[i];
   const variants = itemVariants(rawItem);
-  const curVi = (state.selectedVariant && state.selectedVariant[group+"|"+i] !== undefined) ? state.selectedVariant[group+"|"+i] : itemDefaultVariantIdx(rawItem);
-  const nextVi = variants.length>1 ? (curVi+1)%variants.length : curVi; // 하위그룹이 여러 개면 다음 하위그룹으로 자동 선택해서 복사
-  const v = variants[nextVi] || variants[0];
-  const price = variantUnitPrice(group, i, nextVi);
-  addCustom(group, rawItem.n, v.label||'', v.u||'식', price, false);
+  if(variants.length <= 1){
+    // 하위그룹이 하나뿐이면 고를 필요 없이 바로 복사
+    const v = variants[0];
+    addCustom(group, rawItem.n, v.label||'', v.u||'식', variantUnitPrice(group, i, 0), false);
+    return;
+  }
+  openCopyVariantPicker(group, i, rawItem, variants);
+}
+function openCopyVariantPicker(group, i, rawItem, variants){
+  const html = ''+
+  '<div class="cp-modal-backdrop" id="cp-modal-backdrop">'+
+    '<div class="cp-modal">'+
+      '<button class="cp-modal-close" id="cp-modal-close">×</button>'+
+      '<h3>어떤 하위그룹으로 복사할까요?</h3>'+
+      '<div class="cp-modal-sub">'+escapeHtml(rawItem.n)+'</div>'+
+      '<div class="cp-variant-list">'+
+        variants.map((v,vi)=>'<button class="cp-variant-btn" data-vi="'+vi+'"><span>'+escapeHtml(v.label||'(이름없음)')+'</span><b>₩ '+won(variantUnitPrice(group,i,vi))+'</b></button>').join('')+
+      '</div>'+
+    '</div>'+
+  '</div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+  const close = ()=>{ const el = document.getElementById('cp-modal-backdrop'); if(el) el.remove(); };
+  document.getElementById('cp-modal-close').addEventListener('click', close);
+  document.getElementById('cp-modal-backdrop').addEventListener('click', e=>{ if(e.target.id==='cp-modal-backdrop') close(); });
+  document.querySelectorAll('.cp-variant-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const vi = parseInt(btn.dataset.vi,10);
+      const v = variants[vi];
+      addCustom(group, rawItem.n, v.label||'', v.u||'식', variantUnitPrice(group,i,vi), false);
+      close();
+    });
+  });
 }
 function itemRowHTML(group, i){
   const it = effItemQ(group, i);
