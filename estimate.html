@@ -673,6 +673,11 @@ tr.qadjust-row{background:var(--accent-soft);}
 .ct-link-box{margin-top:18px; background:var(--surface-2); border:1.3px dashed var(--line-strong); border-radius:10px; padding:16px;}
 .ct-link-label{font-size:12px; font-weight:700; color:var(--ink-dim); margin-bottom:8px;}
 .ct-link-row{display:flex; gap:8px;}
+.ct-delivery-choice{display:grid; grid-template-columns:1fr 1.6fr; gap:10px; margin-top:12px;}
+.ct-delivery-btn{display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:16px 10px; border-radius:10px; font-weight:700; font-size:13px; gap:4px;}
+.ct-delivery-esign{align-items:stretch;}
+.ct-delivery-esign .ct-link-row{margin-bottom:6px;}
+.ct-delivery-esign .ct-manual-hint{text-align:center; margin:0;}
 .ct-manual-confirm-row{margin-top:14px; padding-top:14px; border-top:1px dashed var(--line-strong);}
 .ct-manual-hint{display:block; font-size:11.5px; color:var(--ink-faint); margin-bottom:8px; line-height:1.5;}
 .ct-items-box{margin:18px 0; overflow-x:auto;}
@@ -2176,7 +2181,7 @@ function renderContractForm(){
       '<button class="btn-secondary" id="ct-add-payment-btn" style="flex:none;margin-top:8px;">+ 회차 추가</button>'+
     '</div>'+
     '<div class="field"><label>특약사항</label><textarea id="ct-special" rows="4" placeholder="추가로 명시할 조건이 있으면 입력하세요.">'+(t.isDirect?'약관 참조':'')+'</textarea></div>'+
-    '<button class="btn-primary" id="ct-create-btn" style="flex:none;padding:12px 22px;">계약서 링크 생성</button>'+
+    '<button class="btn-primary" id="ct-create-btn" style="flex:none;padding:12px 22px;">계약서 생성</button>'+
     '<div id="ct-result"></div>'+
   '</div>';
   $main.innerHTML = body;
@@ -2245,16 +2250,22 @@ function renderContractForm(){
       special_terms: document.getElementById('ct-special').value.trim(),
     };
     const { data: inserted, error } = await sb.from('contracts').insert(row).select('id, token').single();
-    btn.disabled = false; btn.textContent = '계약서 링크 생성';
+    btn.disabled = false; btn.textContent = '계약서 생성';
     if(error){ alert('계약서 생성에 실패했어요: '+error.message); return; }
     const link = window.location.origin + '/contract-sign.html?token=' + inserted.token;
     document.getElementById('ct-result').innerHTML =
       '<div class="ct-link-box">'+
-        '<div class="ct-link-label">고객에게 이 링크를 보내주세요 (문자·카카오톡 등)</div>'+
-        '<div class="ct-link-row"><input type="text" readonly value="'+escapeHtml(link)+'" id="ct-link-input"><button class="btn-secondary" id="ct-copy-btn" style="flex:none;">복사</button></div>'+
+        '<div class="ct-link-label">✓ 계약서가 생성·저장됐어요. 아직 서명 전이에요 — 아래 중 원하는 방식을 선택하세요.</div>'+
+        '<div class="ct-delivery-choice">'+
+          '<a class="btn-secondary ct-delivery-btn" href="'+escapeHtml(link)+'" target="_blank" rel="noopener">🖨 인쇄해서 자필서명 받기</a>'+
+          '<div class="ct-delivery-btn ct-delivery-esign">'+
+            '<div class="ct-link-row"><input type="text" readonly value="'+escapeHtml(link)+'" id="ct-link-input"><button class="btn-secondary" id="ct-copy-btn" style="flex:none;">복사</button></div>'+
+            '<span class="ct-manual-hint">📱 전자서명 링크 — 고객에게 문자·카카오톡으로 보내주세요</span>'+
+          '</div>'+
+        '</div>'+
         '<div class="ct-manual-confirm-row">'+
-          '<span class="ct-manual-hint">종이 계약서에 직접 서명받으셨거나 전화로 확정된 경우, 전자서명 없이 바로 확정할 수 있어요.</span>'+
-          '<button class="btn-secondary" id="ct-manual-confirm-btn" data-id="'+inserted.id+'" data-token="'+inserted.token+'">전자서명 없이 계약 확정</button>'+
+          '<span class="ct-manual-hint">종이에 자필서명 받으셨거나 전화로 확정된 경우, 여기서 바로 확정 처리하세요. (현장·일정이 자동 생성돼요)</span>'+
+          '<button class="btn-secondary" id="ct-manual-confirm-btn" data-id="'+inserted.id+'" data-token="'+inserted.token+'">자필서명 확정 처리</button>'+
         '</div>'+
       '</div>';
     document.getElementById('ct-copy-btn').addEventListener('click', ()=>{
@@ -2265,16 +2276,16 @@ function renderContractForm(){
       });
     });
     document.getElementById('ct-manual-confirm-btn').addEventListener('click', async (e)=>{
-      if(!confirm('전자서명 없이 이 계약을 바로 확정할까요? 현장과 기본 공정 일정이 자동으로 생성돼요.')) return;
+      if(!confirm('자필서명을 받으셨나요? 확정하면 현장과 기본 공정 일정이 자동으로 생성돼요.')) return;
       const btn2 = e.target;
       btn2.disabled = true; btn2.textContent = '확정 중…';
       const { data: { user } } = await sb.auth.getUser();
       const { error: updErr } = await sb.from('contracts').update({
-        status: 'signed', signed_at: new Date().toISOString(), signer_name: '(관리자 직접 확정)',
+        status: 'signed', signed_at: new Date().toISOString(), signer_name: '(자필서명, 관리자 확정)',
       }).eq('id', btn2.dataset.id);
-      if(updErr){ alert('확정 실패: '+updErr.message); btn2.disabled=false; btn2.textContent='전자서명 없이 계약 확정'; return; }
+      if(updErr){ alert('확정 실패: '+updErr.message); btn2.disabled=false; btn2.textContent='자필서명 확정 처리'; return; }
       const { error: rpcErr } = await sb.rpc('create_site_and_schedule', { p_token: btn2.dataset.token });
-      if(rpcErr){ alert('현장/일정 생성 실패: '+rpcErr.message); btn2.disabled=false; btn2.textContent='전자서명 없이 계약 확정'; return; }
+      if(rpcErr){ alert('현장/일정 생성 실패: '+rpcErr.message); btn2.disabled=false; btn2.textContent='자필서명 확정 처리'; return; }
       btn2.textContent = '✓ 확정 완료 (현장·일정 생성됨)';
       btn2.disabled = true;
     });
@@ -2805,7 +2816,8 @@ async function renderSavedView(){
         '<div class="saved-item-actions">'+
           '<button class="btn-secondary" data-role="load-snap" data-id="'+s.id+'">불러오기</button>'+
           '<button class="btn-secondary" data-role="mark-final" data-id="'+s.id+'">'+(s.is_final?'최종 해제':'최종 견적서로 지정')+'</button>'+
-          '<button class="btn-secondary" data-role="make-contract" data-id="'+s.id+'">전자계약서 만들기</button>'+
+          (s.is_final ? '<button class="btn-secondary" data-role="print-final" data-id="'+s.id+'">📄 견적서 인쇄/PDF</button>' : '')+
+          '<button class="btn-secondary" data-role="make-contract" data-id="'+s.id+'">계약서 만들기</button>'+
           '<button class="btn-remove-snap" data-role="del-snap" data-id="'+s.id+'" title="삭제">×</button>'+
         '</div>'+
       '</div>';
@@ -2862,6 +2874,12 @@ async function renderSavedView(){
       await sb.from('quotes').update({is_final: makingFinal}).eq('id', id);
       await fetchSavedQuotes();
       renderMain();
+    });
+  });
+  $main.querySelectorAll('[data-role="print-final"]').forEach(el=>{
+    el.addEventListener('click', async e=>{
+      await loadSnapshot(e.target.dataset.id);
+      buildPrintView();
     });
   });
   $main.querySelectorAll('[data-role="del-snap"]').forEach(el=>{

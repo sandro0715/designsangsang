@@ -68,6 +68,12 @@ button{font-family:inherit; cursor:pointer;}
 .success-box{text-align:center; padding:20px 0;}
 .success-box .ico{font-size:40px;}
 .download-link{display:inline-block; margin-top:14px; padding:12px 22px; background:var(--accent-deep); color:#fff; border-radius:9px; text-decoration:none; font-weight:700; font-size:13.5px;}
+.print-bar{text-align:right; margin-bottom:10px;}
+@media print{
+  .print-bar, .card:has(#signer-name){display:none !important;}
+  body{background:#fff;}
+  .card{box-shadow:none; border:1px solid #ccc;}
+}
 </style>
 </head>
 <body>
@@ -165,6 +171,7 @@ function renderContract(){
     ? '[직접공사비 + 간접공사비 + 업체수수료(Fee)]의 합계액으로 한다<br>즉, 공과잡비 100만+ 총공사비 합계 15%를 수수료라고 정함. (VAT별도)'
     : '금 '+won(c.total)+' 원 [ ₩'+won(c.total)+' ] (V.A.T 포함)';
   $app.innerHTML = ''+
+  '<div class="print-bar"><button class="btn btn-ghost" id="btn-print-contract">🖨 이 계약서 인쇄하기</button></div>'+
   '<div class="doc-titlebar">'+title+'</div>'+
   '<div class="doc-body">'+
     '<div class="ct-numbered-row"><span class="ct-num">1.</span><span class="ct-label">공 사 명</span><span>:</span><span>'+escapeHtml(c.construction_name||c.quote_label||'-')+'</span></div>'+
@@ -212,6 +219,8 @@ function renderContract(){
   setupCanvas();
   document.getElementById('btn-clear-sign').addEventListener('click', clearCanvas);
   document.getElementById('btn-submit-sign').addEventListener('click', submitSignature);
+  const printBtn = document.getElementById('btn-print-contract');
+  if(printBtn) printBtn.addEventListener('click', ()=>{ window.print(); });
   const nameInput = document.getElementById('signer-name');
   const preview = document.getElementById('ct-sign-name-preview');
   if(nameInput && preview) nameInput.addEventListener('input', ()=>{ preview.textContent = nameInput.value || '(서명 후 표시)'; });
