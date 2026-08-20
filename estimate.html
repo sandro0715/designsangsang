@@ -1317,8 +1317,21 @@ function computeTotals(){
     CAT_GROUPS[cid].forEach(group=>{
       sum += groupSum(group);
       if(isCarpenterDirectGroup(group)){
-        // 목공사 직영모드: 노무비를 품수로 환산해 한 덩어리로 기본공사비에 포함 (옵션 구분 없이)
-        basicDirect += groupSum(group);
+        // 직영모드(목공/타일/전기/필름): 재료비·경비는 옵션 체크 여부대로 나누고, 인건비(품수)만 기본공사비에 한 덩어리로 포함
+        CATALOG[group].items.forEach((it,i)=>{
+          const st = getQty(group, i);
+          if(st.q>0){
+            const amt = lineAmt(itemMaterialRaw(group,i)+itemExpenseRaw(group,i), st.q);
+            if(st.opt) optionDirect += amt; else basicDirect += amt;
+          }
+        });
+        getCustomList(group).forEach(it=>{
+          if(it.q>0){
+            const amt = lineAmt(it.p, it.q);
+            if(it.opt) optionDirect += amt; else basicDirect += amt;
+          }
+        });
+        basicDirect += laborLineAmount(group);
         return;
       }
       CATALOG[group].items.forEach((it,i)=>{
