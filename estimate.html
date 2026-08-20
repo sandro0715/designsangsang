@@ -2583,7 +2583,7 @@ function bindMeta(){
       updateQuoteTypeSwitch();
       saveDraft();
       renderNav(); renderSummary();
-      if(state.mode==='quote' && state.phase==='build') renderMain();
+      if(state.mode==='quote') renderMain();
     });
   });
   document.getElementById('vat-on-fee-check').addEventListener('change', e=>{
@@ -2609,14 +2609,14 @@ function bindMeta(){
     state.quoteAdjustMode = !state.quoteAdjustMode;
     saveDraft();
     updateToolbarButtons();
-    if(state.mode==='quote' && state.phase==='build') renderMain();
+    if(state.mode==='quote') renderMain();
   });
   document.getElementById('btn-product-toggle').addEventListener('click', async ()=>{
     state.productPickMode = !state.productPickMode;
     if(state.productPickMode && !PRODUCT_CACHE) await loadProductCache();
     saveDraft();
     updateToolbarButtons();
-    if(state.mode==='quote' && state.phase==='build') renderMain();
+    if(state.mode==='quote') renderMain();
   });
 }
 function updateToolbarButtons(){
