@@ -681,22 +681,12 @@ tr.qadjust-row{background:var(--accent-soft);}
 .ct-delivery-esign .ct-manual-hint{text-align:center; margin:0;}
 .ct-manual-confirm-row{margin-top:14px; padding-top:14px; border-top:1px dashed var(--line-strong);}
 .ct-manual-hint{display:block; font-size:11.5px; color:var(--ink-faint); margin-bottom:8px; line-height:1.5;}
-.ct-items-box{margin:18px 0; overflow-x:auto;}
-.ct-items-table{width:100%; border-collapse:collapse; font-size:12px;}
-.ct-items-table th{text-align:left; font-size:10.5px; color:var(--ink-faint); border-bottom:1.5px solid var(--ink); padding:6px 5px; white-space:nowrap;}
-.ct-items-table td{padding:5px; border-bottom:1px solid var(--line); vertical-align:middle;}
-.ct-items-table tr.ct-row-unchecked{opacity:.35;}
-.ct-items-table input[type="text"], .ct-items-table input[type="number"]{width:100%; min-width:60px; padding:5px 6px; border:1px solid var(--line-strong); border-radius:5px; font-size:11.5px;}
-.ct-items-table .ct-name-input{min-width:120px;}
-.ct-items-table .ct-qty-input{width:52px; min-width:52px;}
-.ct-items-table .ct-price-input{width:90px; min-width:90px;}
-.ct-add-row{display:grid; grid-template-columns:1.4fr 1fr .7fr .6fr 1fr auto; gap:6px; margin-top:12px; align-items:center;}
-.ct-add-row input{padding:8px 9px; border:1.3px solid var(--line-strong); border-radius:7px; font-size:12px;}
-.ct-totals-row{display:flex; align-items:center; justify-content:space-between; margin-top:16px; padding-top:14px; border-top:1.5px solid var(--ink);}
+.ct-items-box{margin:18px 0;}
+.ct-fee-toggles{display:flex; flex-direction:column; gap:10px; padding:14px 16px; background:var(--surface-2); border-radius:10px; margin-bottom:14px;}
+.ct-fee-ref{font-size:11.5px; color:var(--ink-faint);}
+.ct-totals-row{display:flex; align-items:center; justify-content:space-between; padding-top:14px; border-top:1.5px solid var(--ink);}
 .ct-vat-check{font-size:12.5px; font-weight:700; display:flex; align-items:center; gap:6px;}
 .ct-total-display{font-size:14px;}
-.ct-always-in{text-align:center; color:var(--accent); font-weight:800;}
-tr.ct-row-fee{background:var(--accent-soft);}
 .ct-payment-rows{display:flex; flex-direction:column; gap:8px;}
 .ct-payment-row{display:grid; grid-template-columns:1fr 1.4fr 1.2fr auto; gap:8px; align-items:center;}
 .ct-payment-row input{padding:8px 9px; border:1.3px solid var(--line-strong); border-radius:7px; font-size:12.5px;}
@@ -820,8 +810,9 @@ const state = {
   quoteAdjustMode: false,   // 항목별 상세설정 (재료비·노무비·경비·마진율을 이 견적서에서만 조정) on/off
   productPickMode: false,   // 제품에서 고르기 (등록된 제품 드롭다운) on/off - 상세설정과 별개
   productEditingId: null,   // 설정 > 제품 카탈로그: 지금 수정 중인 제품 id
-  contractItems: null,      // 계약서 만들기 화면: 체크·수정 가능한 항목 목록 (null이면 아직 초기화 안 됨)
   contractVat: true,        // 계약서 만들기 화면: 부가세 포함 여부
+  contractFeeIncluded: null, // 계약서 만들기 화면(직영): 수수료 포함 여부
+  contractAdminIncluded: null, // 계약서 만들기 화면(직영): 공정관리비 포함 여부
   contractPayments: null,   // 계약서 만들기 화면: 회차별 거래대금 [{label,amount,date}]
   quoteItemOverride: {},    // 이 견적서 전용 단가·마진 수정값 (key `${group}|${i}` -> {mat?,labor?,exp?,mo?}) - 서버 기본 단가표에는 영향 없음
   carpenterDaysOverride: {}, // 목공사 품수 수동 조정값 (group -> number|null)
@@ -2031,76 +2022,6 @@ function adminRowHTML(group, i){
   '</tr>';
 }
 /* ============ 전자계약(서명) ============ */
-function buildLineItemsForContract(){
-  const items = [];
-  let seq = 0;
-  CAT_ORDER.forEach(cid=>{
-    CAT_GROUPS[cid].forEach(group=>{
-      CATALOG[group].items.forEach((raw,i)=>{
-        const st = getQty(group,i);
-        if(st.q>0){
-          const it = effItemQ(group,i);
-          const parts = rowPriceParts(group,i);
-          const price = parts.mat+parts.labor+parts.exp;
-          items.push({ id:'li'+(seq++), n:it.n, s:it.s||'', u:it.u, q:st.q, price, amt:lineAmt(price,st.q), opt:!!st.opt, checked:true });
-        }
-      });
-      getCustomList(group).forEach(it=>{
-        if(it.q>0) items.push({ id:'li'+(seq++), n:it.n, s:it.s||'', u:it.u, q:it.q, price:it.p, amt:lineAmt(it.p,it.q), opt:!!it.opt, checked:true });
-      });
-    });
-  });
-  return items;
-}
-function ctItemRowHTML(it){
-  const checkCell = it.synthetic
-    ? '<td><input type="checkbox" data-role="ct-check" data-id="'+it.id+'" '+(it.checked?'checked':'')+'></td>'
-    : '<td class="ct-always-in" title="견적 항목은 항상 포함돼요. 빼려면 오른쪽 × 로 삭제하세요.">✓</td>';
-  return '<tr class="'+(it.checked?'':'ct-row-unchecked')+(it.synthetic?' ct-row-fee':'')+'" data-ct-id="'+it.id+'">'+
-    checkCell+
-    '<td><input type="text" class="ct-name-input" data-role="ct-field" data-field="n" data-id="'+it.id+'" value="'+escapeHtml(it.n)+'"></td>'+
-    '<td><input type="text" class="ct-spec-input" data-role="ct-field" data-field="s" data-id="'+it.id+'" value="'+escapeHtml(it.s||'')+'"></td>'+
-    '<td><input type="text" class="ct-unit-input" data-role="ct-field" data-field="u" data-id="'+it.id+'" value="'+escapeHtml(it.u||'')+'"></td>'+
-    '<td><input type="number" class="ct-qty-input num" data-role="ct-field" data-field="q" data-id="'+it.id+'" value="'+it.q+'" min="0"></td>'+
-    '<td><input type="text" inputmode="numeric" class="ct-price-input money-input" data-role="ct-field" data-field="price" data-id="'+it.id+'" value="'+fmtNum(it.price)+'"></td>'+
-    '<td class="num">₩ '+won(it.amt)+'</td>'+
-    '<td><button class="btn-remove" data-role="ct-del" data-id="'+it.id+'" title="삭제">×</button></td>'+
-  '</tr>';
-}
-function bindCtItemEvents(){
-  $main.querySelectorAll('[data-role="ct-check"]').forEach(el=>{
-    el.addEventListener('change', e=>{
-      const it = state.contractItems.find(x=>x.id===e.target.dataset.id);
-      if(it) it.checked = e.target.checked;
-      e.target.closest('tr').classList.toggle('ct-row-unchecked', !e.target.checked);
-      updateCtTotalDisplay();
-    });
-  });
-  $main.querySelectorAll('[data-role="ct-field"]').forEach(el=>{
-    el.addEventListener('input', e=>{
-      const it = state.contractItems.find(x=>x.id===e.target.dataset.id);
-      if(!it) return;
-      const field = e.target.dataset.field;
-      if(field==='q' || field==='price'){
-        it[field] = field==='price' ? parseCommaNum(e.target.value) : (Number(e.target.value)||0);
-        it.amt = it.q * it.price;
-        const tr = e.target.closest('tr');
-        tr.querySelector('.num').textContent = '₩ '+won(it.amt);
-      } else {
-        it[field] = e.target.value;
-      }
-      updateCtTotalDisplay();
-    });
-  });
-  $main.querySelectorAll('[data-role="ct-del"]').forEach(el=>{
-    el.addEventListener('click', e=>{
-      state.contractItems = state.contractItems.filter(x=>x.id!==e.target.dataset.id);
-      renderMain();
-    });
-  });
-  const vatCheck = document.getElementById('ct-vat-check');
-  if(vatCheck) vatCheck.addEventListener('change', e=>{ state.contractVat = e.target.checked; updateCtTotalDisplay(); });
-}
 function renderCtPaymentRows(){
   const box = document.getElementById('ct-payment-rows');
   if(!box) return;
@@ -2125,26 +2046,40 @@ function renderCtPaymentRows(){
     });
   });
 }
-function includedCtItems(){
-  return state.contractItems.filter(it => it.synthetic ? it.checked : true);
+function computeCtTotal(){
+  const t = computeTotals();
+  let subtotal;
+  if(t.isDirect){
+    subtotal = t.directTotal;
+    if(state.contractFeeIncluded) subtotal += t.serviceFee;
+    if(state.contractAdminIncluded) subtotal += t.adminFee;
+  } else {
+    subtotal = t.basicDirect + t.optionDirect + t.indirectTotal; // 턴키 부가세 제외 소계
+  }
+  const vat = state.contractVat ? Math.round(subtotal*0.1) : 0;
+  return subtotal + vat;
 }
 function updateCtTotalDisplay(){
   const el = document.getElementById('ct-total-display');
   if(!el) return;
-  const subtotal = includedCtItems().reduce((s,it)=>s+it.amt,0);
+  const t = computeTotals();
+  let subtotal;
+  if(t.isDirect){
+    subtotal = t.directTotal;
+    if(state.contractFeeIncluded) subtotal += t.serviceFee;
+    if(state.contractAdminIncluded) subtotal += t.adminFee;
+  } else {
+    subtotal = t.basicDirect + t.optionDirect + t.indirectTotal;
+  }
   const vat = state.contractVat ? Math.round(subtotal*0.1) : 0;
-  el.innerHTML = '소계 ₩ '+won(subtotal)+(state.contractVat?' + 부가세 ₩ '+won(vat):'')+' = <b>₩ '+won(subtotal+vat)+'</b>';
+  el.innerHTML = '소계 ₩ '+won(subtotal)+(state.contractVat?' + 부가세 ₩ '+won(vat):'')+' = <b>총 계약금액 ₩ '+won(subtotal+vat)+'</b>';
 }
 
 function renderContractForm(){
   const t = computeTotals();
-  if(!state.contractItems){
-    const items = buildLineItemsForContract();
-    if(t.isDirect){
-      if(t.serviceFee>0) items.push({id:'fee', n:'수수료', s:'', u:'식', q:1, price:t.serviceFee, amt:t.serviceFee, opt:false, checked:true, synthetic:true});
-      if(t.adminFee>0) items.push({id:'admin', n:'공정관리비', s:'', u:'식', q:1, price:t.adminFee, amt:t.adminFee, opt:false, checked:true, synthetic:true});
-    }
-    state.contractItems = items;
+  if(state.contractFeeIncluded===undefined || state.contractFeeIncluded===null){
+    state.contractFeeIncluded = true;
+    state.contractAdminIncluded = true;
     state.contractVat = true;
   }
   let body = '<div class="cat-head"><div class="eyebrow">전자계약</div><h2>계약서 만들기</h2>'+
@@ -2152,19 +2087,16 @@ function renderContractForm(){
     '</div>';
   body += '<div class="margin-box">'+
     '<div class="margin-box-label">'+escapeHtml(state.meta.customer||'(고객명 없음)')+' · '+escapeHtml(state.meta.project||'')+' · '+(t.isDirect?'직영공사':'턴키')+'</div>'+
-    '<div class="config-desc">견적 항목은 전부 계약서에 포함돼요 (이름·수량·단가는 직접 수정 가능, × 로 삭제도 가능). '+(t.isDirect?'<b>수수료·공정관리비는 체크박스로 포함 여부를 직접 정하세요.</b>':'')+' 계약서를 만드는 순간 지금 상태 그대로 고정돼서 저장돼요.</div>'+
+    '<div class="config-desc">계약서에는 품목 상세 대신 <b>총 계약금액</b>만 들어가요. 품목 상세는 별도로 저장된 "최종 견적서"를 참고·첨부해 주세요.</div>'+
   '</div>';
   body += '<div class="ct-items-box">'+
-    '<table class="ct-items-table"><thead><tr><th></th><th>품명</th><th>규격</th><th>단위</th><th>수량</th><th>단가</th><th>금액</th><th></th></tr></thead>'+
-    '<tbody id="ct-items-tbody">'+state.contractItems.map(ctItemRowHTML).join('')+'</tbody></table>'+
-    '<div class="ct-add-row">'+
-      '<input type="text" id="ct-new-name" placeholder="품명">'+
-      '<input type="text" id="ct-new-spec" placeholder="규격">'+
-      '<input type="text" id="ct-new-unit" placeholder="단위" value="식">'+
-      '<input type="number" id="ct-new-qty" placeholder="수량" value="1" min="0">'+
-      '<input type="text" inputmode="numeric" class="money-input" id="ct-new-price" placeholder="단가">'+
-      '<button class="btn-secondary" id="ct-add-item-btn" style="flex:none;">+ 항목 추가</button>'+
-    '</div>'+
+    (t.isDirect ? (
+      '<div class="ct-fee-toggles">'+
+        '<div class="ct-fee-ref">참고: 실행원가(직접공사비) ₩ '+won(t.directTotal)+' — 이 금액은 계약금액에 포함되지 않아요.</div>'+
+        '<label class="ct-vat-check"><input type="checkbox" id="ct-fee-check" '+(state.contractFeeIncluded?'checked':'')+'> 수수료 포함 (₩ '+won(t.serviceFee)+')</label>'+
+        '<label class="ct-vat-check"><input type="checkbox" id="ct-admin-check" '+(state.contractAdminIncluded?'checked':'')+'> 공정관리비 포함 (₩ '+won(t.adminFee)+')</label>'+
+      '</div>'
+    ) : '')+
     '<div class="ct-totals-row">'+
       '<label class="ct-vat-check"><input type="checkbox" id="ct-vat-check" '+(state.contractVat?'checked':'')+'> 부가세 포함 (10%)</label>'+
       '<div class="ct-total-display" id="ct-total-display"></div>'+
@@ -2186,9 +2118,13 @@ function renderContractForm(){
     '<div id="ct-result"></div>'+
   '</div>';
   $main.innerHTML = body;
-  document.getElementById('ct-back-btn').addEventListener('click', ()=>{ state.mode='saved'; state.contractItems=null; state.contractPayments=null; renderAll(); });
+  document.getElementById('ct-back-btn').addEventListener('click', ()=>{ state.mode='saved'; state.contractPayments=null; renderAll(); });
   updateCtTotalDisplay();
-  bindCtItemEvents();
+  const feeCheck = document.getElementById('ct-fee-check');
+  if(feeCheck) feeCheck.addEventListener('change', e=>{ state.contractFeeIncluded = e.target.checked; updateCtTotalDisplay(); });
+  const adminCheck = document.getElementById('ct-admin-check');
+  if(adminCheck) adminCheck.addEventListener('change', e=>{ state.contractAdminIncluded = e.target.checked; updateCtTotalDisplay(); });
+  document.getElementById('ct-vat-check').addEventListener('change', e=>{ state.contractVat = e.target.checked; updateCtTotalDisplay(); });
   if(!state.contractPayments){
     state.contractPayments = t.isDirect
       ? [{label:'계약금',amount:1000000,date:''},{label:'착수금',amount:0,date:''},{label:'중도금',amount:0,date:''},{label:'잔금',amount:0,date:''}]
@@ -2207,17 +2143,6 @@ function renderContractForm(){
     });
   }
 
-  document.getElementById('ct-add-item-btn').addEventListener('click', ()=>{
-    const n = document.getElementById('ct-new-name').value.trim();
-    const price = parseCommaNum(document.getElementById('ct-new-price').value);
-    if(!n){ alert('품명을 입력해 주세요.'); return; }
-    const q = Number(document.getElementById('ct-new-qty').value)||1;
-    state.contractItems.push({
-      id:'li-new'+Date.now(), n, s:document.getElementById('ct-new-spec').value.trim(),
-      u:document.getElementById('ct-new-unit').value.trim()||'식', q, price, amt:price*q, opt:false, checked:true,
-    });
-    renderMain();
-  });
   document.getElementById('ct-create-btn').addEventListener('click', async ()=>{
     const btn = document.getElementById('ct-create-btn');
     if(!state.customerId){ alert('이 견적은 고객이 연결되어 있지 않아요. 사업 운영 플랫폼의 고객 상세에서 견적을 다시 시작해 주세요.'); return; }
@@ -2225,13 +2150,9 @@ function renderContractForm(){
     const endVal = document.getElementById('ct-end').value;
     if(!startVal || !endVal){ alert('공사 시작일과 종료일을 모두 입력해 주세요. 공사기간이 없으면 계약을 확정할 수 없어요.'); return; }
     if(startVal > endVal){ alert('공사 종료일이 시작일보다 빠를 수 없어요.'); return; }
-    const checkedItems = includedCtItems();
-    if(checkedItems.length===0){ alert('계약서에 포함할 항목을 최소 1개는 체크해 주세요.'); return; }
     btn.disabled = true; btn.textContent = '생성 중…';
     const { data: cust } = await sb.from('customers').select('name, phone').eq('id', state.customerId).single();
-    const subtotal = checkedItems.reduce((s,it)=>s+it.amt, 0);
-    const vatAmt = state.contractVat ? Math.round(subtotal*0.1) : 0;
-    const grandTotal = subtotal + vatAmt;
+    const grandTotal = computeCtTotal();
     const categoriesUsed = CAT_ORDER.filter(cid => t.byCat[cid] > 0).map(cid => ({cid, title: CAT_META[cid].title}));
     const row = {
       customer_id: state.customerId,
@@ -2242,7 +2163,7 @@ function renderContractForm(){
       quote_type: state.meta.quoteType || 'turnkey',
       construction_name: document.getElementById('ct-cname').value.trim(),
       site_address: document.getElementById('ct-caddr').value.trim(),
-      line_items: checkedItems,
+      line_items: [],
       categories_used: categoriesUsed,
       total: grandTotal,
       construction_start: startVal,
@@ -2873,7 +2794,7 @@ async function renderSavedView(){
     el.addEventListener('click', async e=>{
       await loadSnapshot(e.target.dataset.id);
       state.mode = 'contract';
-      state.contractItems = null; state.contractPayments = null; // 새로 계약서 화면 열 때마다 최신 상태로 다시 초기화
+      state.contractPayments = null; state.contractFeeIncluded = null; state.contractAdminIncluded = null; // 새로 계약서 화면 열 때마다 최신 상태로 다시 초기화
       renderAll();
     });
   });

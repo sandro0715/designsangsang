@@ -112,12 +112,6 @@ function renderAlreadySigned(){
     (pdfUrl ? '<a class="download-link" href="'+pdfUrl+'" target="_blank">계약서 PDF 다운로드</a>' : '')+
   '</div>';
 }
-function itemRowsHTML(){
-  return CONTRACT.line_items.map(it=>
-    '<tr><td>'+escapeHtml(it.n)+(it.s?' <span style="color:#999">('+escapeHtml(it.s)+')</span>':'')+(it.opt?' <b style="color:var(--accent)">[옵션]</b>':'')+'</td>'+
-    '<td>'+escapeHtml(it.u)+'</td><td class="num">'+it.q+'</td><td class="num">'+won(it.amt)+'</td></tr>'
-  ).join('');
-}
 const STANDARD_TERMS = [
   ['제1조(총칙)', '공급자인 "디자인상상"(이하 "업체"라 한다)와 수급자인 "입주자(고객)"(이하 "의뢰인"이라 한다)는 대등한 입장에서 서로 협력하여 신의에 따라 성실히 계약을 이행한다.'],
   ['제2조(착공에 관한 사항)', '"업체"는 계약체결 후 착공일에 착공하여야 한다. 견적서 및 시방서를 기초로 하여 "의뢰인"에게 착공을 알리고 이를 통보한다. 또한, 공정 중에 휴일을 정할 경우 사전 통보하여야 한다.'],
@@ -197,11 +191,6 @@ function renderContract(){
         '<div class="ct-sign-field"><span>연 락 처 :</span> 010-8223-1179</div>'+
       '</div>'+
     '</div>'+
-  '</div>'+
-  '<div class="card">'+
-    '<h3>견적 내역 상세</h3>'+
-    '<table class="items"><thead><tr><th>품명</th><th>단위</th><th class="num">수량</th><th class="num">금액</th></tr></thead><tbody>'+itemRowsHTML()+'</tbody></table>'+
-    '<div class="grand-row"><span>총 계약 금액</span><span>₩ '+won(c.total)+'</span></div>'+
   '</div>'+
   '<div class="card">'+
     '<h3>공사 계약 조건</h3>'+
