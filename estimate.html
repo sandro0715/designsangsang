@@ -699,6 +699,8 @@ table.items tbody tr.has-qty:hover{background:#F8F0DC;}
 .config-form .field input[type="number"]{width:160px; padding:9px 10px; border:1.3px solid var(--line-strong); border-radius:8px; font-size:13.5px;}
 
 .window-calc-box{background:var(--surface-2); border:1.3px dashed var(--line-strong); border-radius:10px; padding:16px; margin-top:16px;}
+.sash-box{background:var(--accent-soft); border:1.3px solid var(--accent);}
+.sash-grid{grid-template-columns:1.2fr .8fr .8fr .8fr 1.2fr 1.2fr auto !important;}
 .window-calc-title{font-size:12.5px; font-weight:800; margin-bottom:10px;}
 .window-calc-grid{display:grid; grid-template-columns:1.3fr 1fr 1fr 1fr 1fr 1fr auto; gap:8px; align-items:center;}
 .window-calc-grid select, .window-calc-grid input{padding:8px 9px; border:1.3px solid var(--line-strong); border-radius:7px; font-size:12.5px;}
@@ -1089,13 +1091,17 @@ async function loadLivePricing(){
   }
   state.windowPositions = wpRes.data || [];
 }
+function windowPositionsByCategory(category){
+  return (state.windowPositions||[]).filter(p=>(p.category||'position')===category);
+}
 async function reloadWindowPositions(){
   const { data } = await sb.from('window_positions').select('*').order('sort_order', {ascending:true});
   state.windowPositions = data || [];
 }
-function addWindowPositionToServer(label){
-  const maxOrder = state.windowPositions.reduce((m,p)=>Math.max(m,p.sort_order||0), 0);
-  return sb.from('window_positions').insert({ label, sort_order: maxOrder+1 }).then(async ()=>{ await reloadWindowPositions(); });
+function addWindowPositionToServer(label, category){
+  category = category || 'position';
+  const maxOrder = state.windowPositions.filter(p=>(p.category||'position')===category).reduce((m,p)=>Math.max(m,p.sort_order||0), 0);
+  return sb.from('window_positions').insert({ label, sort_order: maxOrder+1, category }).then(async ()=>{ await reloadWindowPositions(); });
 }
 function deleteWindowPositionFromServer(id){
   return sb.from('window_positions').delete().eq('id', id).then(async ()=>{ await reloadWindowPositions(); });
@@ -1232,6 +1238,15 @@ function addWindowCustomItem(group, position, widthMm, heightMm, unitPrice){
   const list = getCustomList(group).slice();
   const label = position+' ('+widthMm+'×'+heightMm+'mm)';
   list.push({id:"c"+(customSeq++), n:label, u:'자평', p:Number(unitPrice)||0, q:Math.round(jp*100)/100, opt:false});
+  state.custom[group] = list;
+  renderAll();
+}
+function addSashCustomItem(group, windowType, widthMm, heightMm, glassSpec, amount){
+  if(!windowType || !widthMm || !heightMm || !amount) return;
+  const jp = calcJaPyeong(widthMm, heightMm);
+  const list = getCustomList(group).slice();
+  const spec = widthMm+'×'+heightMm+'mm'+(glassSpec?' · '+glassSpec:'')+' (자평 '+jp.toFixed(2)+')';
+  list.push({id:"c"+(customSeq++), n:windowType, s:spec, u:'식', p:Number(amount)||0, q:1, opt:false});
   state.custom[group] = list;
   renderAll();
 }
@@ -2147,10 +2162,25 @@ function customRowHTML(group, it){
   '</tr>';
 }
 function windowCalcBoxHTML(group){
-  const posOptions = state.windowPositions.map(p=>'<option value="'+escapeHtml(p.label)+'">'+escapeHtml(p.label)+'</option>').join('');
+  const posOptions = windowPositionsByCategory('position').map(p=>'<option value="'+escapeHtml(p.label)+'">'+escapeHtml(p.label)+'</option>').join('');
+  const typeOptions = windowPositionsByCategory('window_type').map(p=>'<option value="'+escapeHtml(p.label)+'">'+escapeHtml(p.label)+'</option>').join('');
+  const glassOptions = windowPositionsByCategory('glass_spec').map(p=>'<option value="'+escapeHtml(p.label)+'">'+escapeHtml(p.label)+'</option>').join('');
   return ''+
+  '<div class="window-calc-box sash-box">'+
+    '<div class="window-calc-title">샷시(창) 항목 추가</div>'+
+    '<div class="window-calc-grid sash-grid">'+
+      '<select id="sash-type">'+ '<option value="">창 종류 선택</option>' + typeOptions + '</select>'+
+      '<input type="number" id="sash-width" placeholder="가로(mm)">'+
+      '<input type="number" id="sash-height" placeholder="세로(mm)">'+
+      '<span class="window-calc-japyeong" id="sash-japyeong-out">자평 0.00</span>'+
+      '<select id="sash-glass"><option value="">유리사양 (선택)</option>'+glassOptions+'</select>'+
+      '<input type="text" inputmode="numeric" class="money-input" id="sash-amount" placeholder="금액 (제작+유리+시공 합계)">'+
+      '<button class="btn-add" id="sash-add-btn" data-group="'+group+'">추가</button>'+
+    '</div>'+
+    '<div class="window-calc-hint">거래처 견적서에 나온 최종 금액(제작+유리+시공 합계)을 그대로 입력하세요. 창종류·유리사양 목록은 "설정 → 견적관리설정"에서 관리해요.</div>'+
+  '</div>'+
   '<div class="window-calc-box">'+
-    '<div class="window-calc-title">창호 항목 추가 (사이즈로 계산)</div>'+
+    '<div class="window-calc-title">기타 창호 항목 추가 (사이즈로 계산)</div>'+
     '<div class="window-calc-grid">'+
       '<select id="win-position">'+ '<option value="">위치 선택</option>' + posOptions + '</select>'+
       '<input type="number" id="win-width" placeholder="가로(mm)">'+
@@ -2160,7 +2190,7 @@ function windowCalcBoxHTML(group){
       '<span class="window-calc-amt" id="win-amt-out">₩ 0</span>'+
       '<button class="btn-add" id="win-add-btn" data-group="'+group+'">추가</button>'+
     '</div>'+
-    '<div class="window-calc-hint">자평 = (가로mm × 세로mm) ÷ 90000. 위치 목록은 "설정 → 견적관리설정"에서 관리할 수 있어요.</div>'+
+    '<div class="window-calc-hint">자평 = (가로mm × 세로mm) ÷ 90000. 몰딩·잡자재처럼 면적 단가로 계산하는 항목에 써주세요.</div>'+
   '</div>';
 }
 function laborTopItemHTML(group){
@@ -2526,17 +2556,23 @@ function cidForGroup(group){
 }
 
 function windowPositionsAdminHTML(){
-  const rows = state.windowPositions.map(p=>
+  return ''+
+    windowListEditorHTML('position', '창호 위치 목록 관리', '여기서 추가/삭제한 위치가 견적 작성 화면의 "기타 창호 항목" 드롭다운에 반영돼요.', '새 위치 이름 (예: 거실확장)')+
+    windowListEditorHTML('window_type', '샷시 창종류 목록 관리', '발코니 단창/이중창처럼, 샷시 항목 추가할 때 고르는 창 종류예요.', '새 창종류 이름 (예: 발코니 삼중창)')+
+    windowListEditorHTML('glass_spec', '유리사양 목록 관리', '26T/S로이/그린+투명처럼, 샷시 항목에 붙는 유리 사양이에요.', '새 유리사양 (예: 26T/로이유리/투명+투명)');
+}
+function windowListEditorHTML(category, title, hint, placeholder){
+  const rows = windowPositionsByCategory(category).map(p=>
     '<div class="wp-row"><span>'+escapeHtml(p.label)+'</span><button class="btn-remove" data-role="wp-del" data-id="'+p.id+'" title="삭제">×</button></div>'
   ).join('');
   return ''+
   '<div class="margin-box">'+
-    '<div class="margin-box-label">창호 위치 목록 관리</div>'+
-    '<div class="margin-box-hint" style="margin-bottom:12px;">여기서 추가/삭제한 위치가 견적 작성 화면의 창호 계산기 드롭다운에 그대로 반영돼요.</div>'+
-    '<div class="wp-list">'+(rows||'<div class="empty-note">등록된 위치가 없어요.</div>')+'</div>'+
+    '<div class="margin-box-label">'+title+'</div>'+
+    '<div class="margin-box-hint" style="margin-bottom:12px;">'+hint+'</div>'+
+    '<div class="wp-list">'+(rows||'<div class="empty-note">등록된 항목이 없어요.</div>')+'</div>'+
     '<div class="wp-add-row">'+
-      '<input type="text" id="wp-new-label" placeholder="새 위치 이름 (예: 거실확장)">'+
-      '<button class="btn-add" id="wp-add-btn">추가</button>'+
+      '<input type="text" class="wp-new-label-input" data-category="'+category+'" placeholder="'+placeholder+'">'+
+      '<button class="btn-add wp-add-btn-cat" data-category="'+category+'">추가</button>'+
     '</div>'+
   '</div>';
 }
@@ -2851,6 +2887,29 @@ function bindMainEvents(){
         addWindowCustomItem(group, winPos.value, winW.value, winH.value, parseCommaNum(winP.value));
       });
     }
+    const sashType = document.getElementById('sash-type');
+    const sashW = document.getElementById('sash-width');
+    const sashH = document.getElementById('sash-height');
+    const sashGlass = document.getElementById('sash-glass');
+    const sashAmt = document.getElementById('sash-amount');
+    const sashAddBtn = document.getElementById('sash-add-btn');
+    function updateSashPreview(){
+      const jp = calcJaPyeong(sashW.value, sashH.value);
+      const out = document.getElementById('sash-japyeong-out');
+      if(out) out.textContent = '자평 '+jp.toFixed(2);
+    }
+    [sashW, sashH].forEach(el=>{ if(el) el.addEventListener('input', updateSashPreview); });
+    if(sashAddBtn){
+      sashAddBtn.addEventListener('click', ()=>{
+        const group = sashAddBtn.dataset.group;
+        if(!sashType.value){ alert('창 종류를 선택해 주세요.'); return; }
+        if(!sashW.value || !sashH.value){ alert('가로/세로 사이즈를 입력해 주세요.'); return; }
+        if(!sashAmt.value){ alert('금액을 입력해 주세요.'); return; }
+        addSashCustomItem(group, sashType.value, sashW.value, sashH.value, sashGlass.value, parseCommaNum(sashAmt.value));
+        sashW.value=''; sashH.value=''; sashAmt.value=''; sashType.value=''; sashGlass.value='';
+        updateSashPreview();
+      });
+    }
     $main.querySelectorAll('.carpenter-days-input').forEach(el=>{
       el.addEventListener('input', e=>{
         const group = e.target.dataset.group;
@@ -2877,6 +2936,18 @@ function bindMainEvents(){
         renderMain();
       });
     }
+    $main.querySelectorAll('.wp-add-btn-cat').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const category = btn.dataset.category;
+        const input = $main.querySelector('.wp-new-label-input[data-category="'+category+'"]');
+        const label = input.value.trim();
+        if(!label) return;
+        btn.disabled = true;
+        await addWindowPositionToServer(label, category);
+        btn.disabled = false;
+        renderMain();
+      });
+    });
     $main.querySelectorAll('[data-role="wp-del"]').forEach(el=>{
       el.addEventListener('click', async ()=>{
         if(!confirm('이 위치를 삭제할까요?')) return;
