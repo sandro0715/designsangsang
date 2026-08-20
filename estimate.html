@@ -1229,6 +1229,14 @@ function addCustom(group, n, s, u, p, opt, sourceIndex, variantIdx, parts){
   state.custom[group] = list;
   renderAll();
 }
+function customEffectivePrice(group, it){
+  // 마진 적용 대상(applyMargin) 커스텀 항목은 입력값을 "원가"로 보고 턴키는 마진을 붙이고, 직영은 원가 그대로 반영
+  if(!it.applyMargin) return it.p;
+  const isDirect = state.meta.quoteType === 'direct';
+  if(isDirect) return it.p;
+  const m = (it.mo !== undefined && it.mo !== null) ? it.mo : categoryMargin(group);
+  return Math.round(it.p * (1+m));
+}
 function calcJaPyeong(widthMm, heightMm){
   return (Number(widthMm)||0) * (Number(heightMm)||0) / 90000;
 }
@@ -1247,7 +1255,7 @@ function addSashCustomItem(group, position, windowType, widthMm, heightMm, glass
   const list = getCustomList(group).slice();
   const name = position ? position+' '+windowType : windowType;
   const spec = widthMm+'×'+heightMm+'mm'+(glassSpec?' · '+glassSpec:'')+' (자평 '+jp.toFixed(2)+')';
-  list.push({id:"c"+(customSeq++), n:name, s:spec, u:'식', p:Number(amount)||0, q:1, opt:false});
+  list.push({id:"c"+(customSeq++), n:name, s:spec, u:'식', p:Number(amount)||0, q:1, opt:false, applyMargin:true});
   state.custom[group] = list;
   renderAll();
 }
@@ -1315,7 +1323,7 @@ function groupSum(group){
       const st = getQty(group,i);
       if(st.q>0 && !st.opt){ matSum += itemMaterialRaw(group,i)*st.q; expSum += itemExpenseRaw(group,i)*st.q; }
     });
-    getCustomList(group).forEach(it=>{ if(it.q>0 && !it.opt) matSum += lineAmt(it.p, it.q); });
+    getCustomList(group).forEach(it=>{ if(it.q>0 && !it.opt) matSum += lineAmt(customEffectivePrice(group,it), it.q); });
     // 인건비(품수 입력값 × 일당)를 견적 항목으로 포함해서 합산
     return matSum + expSum + laborLineAmount(group);
   }
@@ -1325,7 +1333,7 @@ function groupSum(group){
     if(st.q>0 && !st.opt) sum += lineAmt(computePrice(group,i), st.q);
   });
   getCustomList(group).forEach(it=>{
-    if(it.q>0 && !it.opt) sum += lineAmt(it.p, it.q);
+    if(it.q>0 && !it.opt) sum += lineAmt(customEffectivePrice(group,it), it.q);
   });
   return sum;
 }
@@ -1337,7 +1345,7 @@ function groupOptionSum(group){
       const st = getQty(group,i);
       if(st.q>0 && st.opt) sum += lineAmt(itemMaterialRaw(group,i)+itemExpenseRaw(group,i), st.q);
     });
-    getCustomList(group).forEach(it=>{ if(it.q>0 && it.opt) sum += lineAmt(it.p, it.q); });
+    getCustomList(group).forEach(it=>{ if(it.q>0 && it.opt) sum += lineAmt(customEffectivePrice(group,it), it.q); });
     return sum;
   }
   let sum = 0;
@@ -1346,7 +1354,7 @@ function groupOptionSum(group){
     if(st.q>0 && st.opt) sum += lineAmt(computePrice(group,i), st.q);
   });
   getCustomList(group).forEach(it=>{
-    if(it.q>0 && it.opt) sum += lineAmt(it.p, it.q);
+    if(it.q>0 && it.opt) sum += lineAmt(customEffectivePrice(group,it), it.q);
   });
   return sum;
 }
@@ -2137,7 +2145,8 @@ function itemRowHTML(group, i){
   '</tr>';
 }
 function customRowHTML(group, it){
-  const amt = lineAmt(it.p, it.q);
+  const effPrice = customEffectivePrice(group, it);
+  const amt = lineAmt(effPrice, it.q);
   let specCell = it.s ? '<div class="item-spec">'+escapeHtml(it.s)+'</div>' : '';
   const isCopy = it.sourceIndex !== undefined;
   if(isCopy && CATALOG[group] && CATALOG[group].items[it.sourceIndex]){
@@ -2148,13 +2157,18 @@ function customRowHTML(group, it){
       '</select>';
     }
   }
+  if(it.applyMargin){
+    const isDirect = state.meta.quoteType === 'direct';
+    const effMarginPct = (it.mo!==undefined&&it.mo!==null) ? pct(it.mo) : pct(categoryMargin(group));
+    specCell += '<div class="item-spec">원가 ₩'+won(it.p)+(isDirect?' (직영: 마진 미적용)':' · 마진 <input type="number" step="1" class="cost-input num" style="width:44px;" value="'+effMarginPct+'" data-role="c-margin" data-group="'+group+'" data-id="'+it.id+'" onfocus="this.select()"> %')+'</div>';
+  }
   const costCells = isCopy
     ? '<td class="col-cost num">'+(it.mat>0?won(it.mat):'')+'</td><td class="col-cost num">'+(it.labor>0?won(it.labor):'')+'</td><td class="col-cost num">'+(it.exp>0?won(it.exp):'')+'</td>'
-    : '<td class="col-cost num">'+won(it.p)+'</td><td class="col-cost num"></td><td class="col-cost num"></td>';
+    : '<td class="col-cost num">'+won(effPrice)+'</td><td class="col-cost num"></td><td class="col-cost num"></td>';
   return ''+
   '<tr class="custom-row '+(it.q>0?'has-qty':'')+'">'+
     '<td class="col-idx num">＋</td>'+
-    '<td class="col-name"><div class="item-name">'+escapeHtml(it.n)+(isCopy?'':' <span style="color:var(--accent);font-size:10.5px;font-weight:700;">직접입력</span>')+'</div>'+specCell+'</td>'+
+    '<td class="col-name"><div class="item-name">'+escapeHtml(it.n)+(isCopy||it.applyMargin?'':' <span style="color:var(--accent);font-size:10.5px;font-weight:700;">직접입력</span>')+'</div>'+specCell+'</td>'+
     '<td class="col-unit">'+escapeHtml(it.u)+'</td>'+
     costCells+
     '<td class="col-opt"><input type="checkbox" class="opt-check" '+(it.opt?'checked':'')+' data-role="c-opt" data-group="'+group+'" data-id="'+it.id+'"></td>'+
@@ -2815,7 +2829,22 @@ function bindMainEvents(){
         v = Math.round(v*10)/10;
         updateCustom(group, id, {q:v});
         const it = getCustomList(group).find(x=>x.id===id);
-        updateRowAmount(e.target.closest('tr'), it.p, v);
+        updateRowAmount(e.target.closest('tr'), customEffectivePrice(group,it), v);
+        updateSubtotalDisplay(group);
+        renderNav(); renderSummary();
+      });
+    });
+    $main.querySelectorAll('[data-role="c-margin"]').forEach(el=>{
+      el.addEventListener('input', e=>{
+        const group = e.target.dataset.group, id = e.target.dataset.id;
+        const raw = e.target.value;
+        const v = raw === '' ? undefined : Number(raw)/100;
+        updateCustom(group, id, {mo:v});
+        const it = getCustomList(group).find(x=>x.id===id);
+        const tr = e.target.closest('tr');
+        updateRowAmount(tr, customEffectivePrice(group,it), it.q);
+        const costSpan = tr.querySelector('.col-cost.num');
+        if(costSpan) costSpan.textContent = won(customEffectivePrice(group,it));
         updateSubtotalDisplay(group);
         renderNav(); renderSummary();
       });
@@ -3481,9 +3510,10 @@ function buildPrintView(){
       });
       getCustomList(group).forEach(it=>{
         if(it.q>0){
-          const amt = lineAmt(it.p,it.q);
+          const effPrice = customEffectivePrice(group, it);
+          const amt = lineAmt(effPrice,it.q);
           const rowHtml = '<tr><td>'+escapeHtml(it.n)+(it.s?' <span style="color:#888">('+escapeHtml(it.s)+')</span>':'')+'</td><td>'+escapeHtml(it.u)+'</td>'+
-            '<td class="p-right">'+won(it.p)+'</td><td class="p-right">-</td><td class="p-right">-</td>'+
+            '<td class="p-right">'+won(effPrice)+'</td><td class="p-right">-</td><td class="p-right">-</td>'+
             '<td class="p-right">'+it.q+'</td><td class="p-right">'+won(amt)+'</td></tr>';
           if(it.opt) optionRows += '<tr><td>'+meta.no+'. '+meta.title+' — '+escapeHtml(it.n)+(it.s?' ('+escapeHtml(it.s)+')':'')+'</td><td>'+escapeHtml(it.u)+'</td><td class="p-right">'+it.q+'</td><td class="p-right">'+won(amt)+'</td></tr>';
           else catRows += rowHtml;
