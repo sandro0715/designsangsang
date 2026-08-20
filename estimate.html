@@ -264,6 +264,8 @@ table.admin-table .col-vat{width:56px; text-align:center;}
   align-items:start;
 }
 body.embed-admin .layout{grid-template-columns:236px 1fr;}
+body.nav-hidden.embed-admin .layout{grid-template-columns:0 1fr;}
+body.nav-hidden #nav-list{display:none;}
 
 /* ===== Left nav ===== */
 .nav{
@@ -1406,6 +1408,11 @@ function escapeHtml(s){
 
 /* ============ Nav ============ */
 function renderNav(){
+  if(FOCUSED_ADMIN_SECTION){
+    $nav.innerHTML = '';
+    document.body.classList.add('nav-hidden');
+    return;
+  }
   if(state.mode === 'quote' && state.phase !== 'build'){
     $nav.innerHTML = '<div class="nav-placeholder">체크리스트에서 항목을 선택하면<br>여기에 공종별 목록이 나타나요.</div>';
     return;
@@ -3085,6 +3092,7 @@ function updateQuoteTypeSwitch(){
 }
 let CURRENT_ROLE = null;
 let EMBED_ADMIN_MODE = false; // index.html "설정" 탭에서 iframe으로 열렸을 때 true
+let FOCUSED_ADMIN_SECTION = false; // "직영공사 수수료"/"제품 카탈로그"처럼 특정 화면으로 바로 진입했을 때 true (공종 목록 숨김)
 function bindModeSwitch(){
   $modeBtns.forEach(btn=>{
     btn.addEventListener('click', ()=>{
@@ -3198,6 +3206,7 @@ document.addEventListener('input', e=>{
   if(EMBED_ADMIN_MODE && activeParam){
     state.mode = 'admin';
     state.active = activeParam; // 'config' | 'products' | 카테고리 번호
+    FOCUSED_ADMIN_SECTION = true;
   }
 
   bindMeta();
