@@ -646,9 +646,8 @@ body.summary-collapsed .summary-toggle{transform:rotate(180deg);}
   .p-stamp-box{display:inline-block; margin-left:10px; width:26px; height:26px; line-height:24px; text-align:center; border:1.3px solid #999; border-radius:50%; font-size:9px; color:#888; vertical-align:middle;}
   table.p-table{width:100%; border-collapse:collapse; margin-bottom:4px;}
   table.p-table th, table.p-table td{border:1px solid #ccc; padding:5px 7px; font-size:11px;}
-  table.p-table th{background:#eee;}
-  .p-cat-row td{background:#f7f5ee; font-weight:700;}
-  .p-cat-sub td{background:#fbfaf5; font-weight:700; color:#8A6F4E; border-top:1.3px solid #ccc;}
+  table.p-table th{background:#E8E2CF; font-weight:800; color:#4E3A21;}
+  .p-cat-row td{background:#EDE4CC; font-weight:800; color:#4E3A21;}
   .p-right{text-align:right;}
   .p-totals{width:320px; margin-left:auto; margin-top:12px; border-collapse:collapse;}
   .p-totals td{padding:5px 8px; font-size:11.5px; border-bottom:1px solid #ddd;}
@@ -3786,8 +3785,7 @@ function buildPrintView(){
       }
     });
     if(catRows){
-      rows += '<tr class="p-cat-row"><td colspan="7">'+meta.no+'. '+meta.title+'</td></tr>' + catRows;
-      rows += '<tr class="p-cat-sub"><td colspan="6">'+meta.title+' 소계</td><td class="p-right">'+won(catSum)+'</td></tr>';
+      rows += '<tr class="p-cat-row"><td colspan="6">'+meta.no+'. '+meta.title+'</td><td class="p-right">'+won(catSum)+'</td></tr>' + catRows;
     }
   });
   if(!rows){
@@ -3805,6 +3803,7 @@ function buildPrintView(){
       '<div><span>견적일</span> '+today+'</div>'+
       '<div><span>프로젝트/공사명</span> '+escapeHtml(projectTitle)+'</div>'+
       '<div><span>고객명</span> '+escapeHtml(state.meta.customer||'-')+' 고객님</div>'+
+      '<div><span>전시장 주소</span> 서울 강동구 고덕로 133, 롯데캐슬퍼스트상가 209호 (암사동)</div>'+
       '<div class="p-manager-row"><span>담당자</span> 윤상돈 실장 <span class="p-stamp-box">인</span></div>'+
     '</div>'+
     '<table class="p-table"><thead><tr><th>품명 / 규격</th><th>단위</th><th class="p-right">수량</th><th class="p-right">재료비</th><th class="p-right">노무비</th><th class="p-right">경비</th><th class="p-right">금액</th></tr></thead><tbody>'+rows+'</tbody></table>'+
