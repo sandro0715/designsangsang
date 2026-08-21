@@ -849,6 +849,7 @@ const SETTINGS_SECTIONS = [
   {id:'estimate', title:'견적관리설정', desc:'견적 계산기의 단가·마진·품목을 관리해요.', icon:'💰', src:'estimate.html?mode=admin'},
   {id:'directfee', title:'직영공사 수수료', desc:'직영공사 수수료율·공정관리비·직종별 일당을 관리해요.', icon:'⚙️', src:'estimate.html?mode=admin&active=config'},
   {id:'products', title:'제품 카탈로그', desc:'타일·마루·조명 등 실제 자재 사진·가격을 등록해요.', icon:'📦', src:'estimate.html?mode=admin&active=products'},
+  {id:'indirect', title:'간접공사비 항목', desc:'턴키 견적의 일반관리비·공과잡비 등 항목을 관리해요.', icon:'📊', src:'estimate.html?mode=admin&active=indirect'},
 ];
 function renderSettings(){
   if(window.CURRENT_ROLE !== 'admin'){

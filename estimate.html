@@ -731,6 +731,15 @@ body.summary-collapsed .summary-toggle{transform:rotate(180deg);}
 @media (max-width:900px){ .window-calc-grid{grid-template-columns:1fr 1fr;} }
 .wp-list{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px;}
 .wp-row{display:flex; align-items:center; gap:6px; background:var(--surface); border:1px solid var(--line-strong); border-radius:20px; padding:6px 6px 6px 12px; font-size:12.5px;}
+.indirect-row{border-radius:10px; width:100%; max-width:360px; margin-bottom:8px;}
+.indirect-label-input{flex:1; border:none; background:transparent; font-size:13px; font-weight:700;}
+.indirect-percent-input{width:56px; border:1px solid var(--line-strong); border-radius:6px; padding:3px 5px; text-align:right; font-size:12.5px;}
+.indirect-check-label{display:flex; align-items:center; gap:5px; cursor:pointer;}
+.indirect-item-li{display:flex; align-items:center; justify-content:space-between;}
+.adjustment-li{display:flex; align-items:center; justify-content:space-between; gap:8px;}
+.adj-neg-tag{color:var(--danger); font-weight:800;}
+.adjustment-input{max-width:120px; text-align:right;}
+.vat-toggle-li{display:flex; align-items:center; justify-content:space-between;}
 .wp-add-row{display:flex; gap:8px;}
 .wp-add-row input{flex:1; padding:8px 10px; border:1.3px solid var(--line-strong); border-radius:8px; font-size:13px;}
 .carpenter-box{background:var(--surface-2); border:1.3px dashed var(--line-strong); border-radius:10px; padding:16px; margin-top:16px;}
@@ -885,6 +894,8 @@ const state = {
   selectedVariant: {}, // key `${group}|${i}` -> 하위그룹 인덱스 (미지정 시 기본값 사용)
   bathroomCount: 1,    // 욕실 공사 개소 수 (1~4)
   rowOrder: {},         // key: group -> [row-key,...] 견적 작성 화면에서 드래그로 바꾼 항목 표시 순서
+  indirectItemsCache: [], // 설정에서 관리하는 간접공사비 항목 목록 [{id,label,percent}]
+  indirectChecked: {},   // key: indirect_cost_items.id -> true/false (이 견적에서 포함 여부, 기본 true)
   phase: "picker",    // "picker" | "select" | "build"  (견적 작성 진행 단계)
   flow: null,         // "solo" | "consult"  (혼자 작업 / 고객 상담 모드)
   selectIdx: 0,       // (미사용 - 이전 버전 호환용)
@@ -1077,12 +1088,14 @@ function saveCategoryTitleToServer(cid, title){
   return sb.from('category_titles').upsert({ cid, title }).then(({error})=>{ if(error) console.error('카테고리 이름 저장 실패', error); });
 }
 async function loadLivePricing(){
-  const [ovRes, mgRes, cfgRes, wpRes] = await Promise.all([
+  const [ovRes, mgRes, cfgRes, wpRes, indRes] = await Promise.all([
     sb.from('price_overrides').select('*'),
     sb.from('category_margins').select('*'),
     sb.from('quote_config').select('*').eq('id','default').single(),
     sb.from('window_positions').select('*').order('sort_order', {ascending:true}),
+    sb.from('indirect_cost_items').select('*').order('sort_order', {ascending:true}),
   ]);
+  state.indirectItemsCache = indRes.data || [];
   const priceOverride = {};
   (ovRes.data||[]).forEach(r=>{
     const o = {};
@@ -1431,13 +1444,20 @@ function computeTotals(){
     return {basicDirect, optionDirect, directTotal, serviceFee, adminFee, indirectTotal:serviceFee+adminFee, subtotal, vat, feeVat, itemVat, itemVatBase, vatOnFee, grand, byCat, isDirect:true};
   }
 
-  const indGen = directTotal * IND_GEN;
-  const indMisc = directTotal * IND_MISC;
-  const indirectTotal = indGen + indMisc;
-  const subtotal = directTotal + indirectTotal;
-  const vat = subtotal * VAT;
-  const grand = subtotal + vat;
-  return {basicDirect, optionDirect, directTotal, indGen, indMisc, indirectTotal, subtotal, vat, grand, byCat, isDirect:false};
+  // 턴키: 간접공사비 항목들(설정에서 관리) 중 이 견적에서 체크된 것만 합산
+  const indirectItems = (state.indirectItemsCache||[]).map(it=>{
+    const checked = state.indirectChecked[it.id] !== false; // 기본값: 체크됨
+    const amt = checked ? directTotal * (Number(it.percent)||0)/100 : 0;
+    return { id:it.id, label:it.label, percent:it.percent, checked, amt };
+  });
+  const indirectTotal = indirectItems.reduce((s,it)=>s+it.amt, 0);
+  const subtotalAB = directTotal + indirectTotal; // 소계 (A+B)
+  const adjustment = Number(state.meta.priceAdjustment)||0; // 항상 차감(할인)
+  const afterAdjustment = subtotalAB - adjustment;
+  const vatIncluded = state.meta.vatIncludedTurnkey !== false; // 기본값: 포함
+  const vat = vatIncluded ? afterAdjustment * VAT : 0;
+  const grand = afterAdjustment + vat;
+  return {basicDirect, optionDirect, directTotal, indirectItems, indirectTotal, subtotalAB, adjustment, afterAdjustment, vatIncluded, subtotal:afterAdjustment, vat, grand, byCat, isDirect:false};
 }
 
 /* ============ Persistence: 로컬 임시 작업본(draft)은 그대로 localStorage, "저장된 견적"은 서버(Supabase) ============ */
@@ -1452,7 +1472,7 @@ function saveDraft(){
       qty: state.qty, custom: state.custom,
       meta: state.meta, selected: state.selected, selectedVariant: state.selectedVariant, bathroomCount: state.bathroomCount, phase: state.phase, flow: state.flow, selectIdx: state.selectIdx, catView: state.catView,
       customerId: state.customerId, currentQuoteId: state.currentQuoteId,
-      carpenterDaysOverride: state.carpenterDaysOverride, quoteItemOverride: state.quoteItemOverride, quoteAdjustMode: state.quoteAdjustMode, productPickMode: state.productPickMode, rowOrder: state.rowOrder,
+      carpenterDaysOverride: state.carpenterDaysOverride, quoteItemOverride: state.quoteItemOverride, quoteAdjustMode: state.quoteAdjustMode, productPickMode: state.productPickMode, rowOrder: state.rowOrder, indirectChecked: state.indirectChecked,
     }));
   }catch(e){ /* storage unavailable (e.g. private mode) -- fail silently */ }
 }
@@ -1477,6 +1497,7 @@ function loadDraft(){
     state.quoteItemOverride = obj.quoteItemOverride || {};
     state.quoteAdjustMode = obj.quoteAdjustMode || false;
     state.rowOrder = obj.rowOrder || {};
+    state.indirectChecked = obj.indirectChecked || {};
     state.productPickMode = obj.productPickMode || false;
     if(state.phase === 'build' && selectedCountAll()===0) backfillSelectedFromQty();
   }catch(e){ /* ignore corrupt draft */ }
@@ -1513,7 +1534,7 @@ async function saveCurrentAsSnapshot(label, forceNew){
     snapshot: {
       qty: state.qty, custom: state.custom,
       priceOverride: state.priceOverride, marginOverride: state.marginOverride,
-      meta: state.meta, selected: state.selected, selectedVariant: state.selectedVariant, bathroomCount: state.bathroomCount, carpenterDaysOverride: state.carpenterDaysOverride, quoteItemOverride: state.quoteItemOverride, rowOrder: state.rowOrder,
+      meta: state.meta, selected: state.selected, selectedVariant: state.selectedVariant, bathroomCount: state.bathroomCount, carpenterDaysOverride: state.carpenterDaysOverride, quoteItemOverride: state.quoteItemOverride, rowOrder: state.rowOrder, indirectChecked: state.indirectChecked,
     },
   };
   const { error } = await sb.from('quotes').upsert(row);
@@ -1537,6 +1558,7 @@ async function loadSnapshot(id){
   state.selectedVariant = d.selectedVariant || {};
   state.bathroomCount = d.bathroomCount || 1;
   state.rowOrder = d.rowOrder || {};
+  state.indirectChecked = d.indirectChecked || {};
   state.carpenterDaysOverride = d.carpenterDaysOverride || {};
   state.quoteItemOverride = d.quoteItemOverride || {};
   if(selectedCountAll()===0) backfillSelectedFromQty();
@@ -1806,6 +1828,61 @@ function bindProductEditEvents(){
   });
 }
 
+/* ============ 간접공사비 항목 관리 (턴키: 일반관리비/공과잡비 등) ============ */
+async function reloadIndirectItems(){
+  const { data } = await sb.from('indirect_cost_items').select('*').order('sort_order', {ascending:true});
+  state.indirectItemsCache = data || [];
+}
+function renderIndirectItemsConfig(){
+  let body = '<div class="cat-head"><div class="eyebrow">설정</div><h2>간접공사비 항목</h2></div>';
+  body += '<div class="margin-box"><div class="config-desc">턴키 견적의 "간접공사비(B)"를 구성하는 항목들이에요. 여기서 추가/삭제/비율 수정하면, 견적 작성 화면 오른쪽 요약 패널에서 항목별로 체크해서 포함 여부를 정할 수 있어요.</div></div>';
+  body += '<div class="wp-list" id="indirect-list">'+
+    (state.indirectItemsCache||[]).map(it=>indirectItemRowHTML(it)).join('')+
+  '</div>';
+  body += '<div class="wp-add-row">'+
+    '<input type="text" id="indirect-new-label" placeholder="항목명 (예: 안전관리비)">'+
+    '<input type="number" step="0.1" id="indirect-new-percent" placeholder="비율(%)" style="max-width:100px;">'+
+    '<button class="btn-add" id="indirect-add-btn">추가</button>'+
+  '</div>';
+  $main.innerHTML = body;
+
+  $main.querySelectorAll('[data-role="indirect-percent-edit"]').forEach(el=>{
+    el.addEventListener('change', async e=>{
+      await sb.from('indirect_cost_items').update({percent: Number(e.target.value)||0}).eq('id', e.target.dataset.id);
+      await reloadIndirectItems();
+    });
+  });
+  $main.querySelectorAll('[data-role="indirect-label-edit"]').forEach(el=>{
+    el.addEventListener('change', async e=>{
+      await sb.from('indirect_cost_items').update({label: e.target.value.trim()}).eq('id', e.target.dataset.id);
+      await reloadIndirectItems();
+    });
+  });
+  $main.querySelectorAll('[data-role="indirect-del"]').forEach(el=>{
+    el.addEventListener('click', async ()=>{
+      if(!confirm('이 항목을 삭제할까요?')) return;
+      await sb.from('indirect_cost_items').delete().eq('id', el.dataset.id);
+      await reloadIndirectItems();
+      renderMain();
+    });
+  });
+  document.getElementById('indirect-add-btn').addEventListener('click', async ()=>{
+    const label = document.getElementById('indirect-new-label').value.trim();
+    const percent = Number(document.getElementById('indirect-new-percent').value)||0;
+    if(!label){ alert('항목명을 입력해 주세요.'); return; }
+    const maxOrder = (state.indirectItemsCache||[]).reduce((m,it)=>Math.max(m,it.sort_order||0),0);
+    await sb.from('indirect_cost_items').insert({ label, percent, sort_order: maxOrder+1 });
+    await reloadIndirectItems();
+    renderMain();
+  });
+}
+function indirectItemRowHTML(it){
+  return '<div class="wp-row indirect-row">'+
+    '<input type="text" class="indirect-label-input" value="'+escapeHtml(it.label)+'" data-role="indirect-label-edit" data-id="'+it.id+'">'+
+    '<input type="number" step="0.1" class="indirect-percent-input" value="'+(it.percent!==null?it.percent:'')+'" data-role="indirect-percent-edit" data-id="'+it.id+'"> %'+
+    '<button class="btn-remove" data-role="indirect-del" data-id="'+it.id+'" title="삭제">×</button>'+
+  '</div>';
+}
 function renderDirectFeeConfig(){
   const cfg = state.quoteConfig;
   let body = '<div class="cat-head"><div class="eyebrow">설정</div><h2>직영공사 수수료</h2></div>';
@@ -2761,6 +2838,9 @@ function renderMain(){
   if(state.mode === 'admin' && state.active === 'products'){
     renderProductCatalog(); return;
   }
+  if(state.mode === 'admin' && state.active === 'indirect'){
+    renderIndirectItemsConfig(); return;
+  }
   const cid = state.active;
   const meta = CAT_META[cid];
   const titleHTML = state.mode==='admin'
@@ -3434,14 +3514,23 @@ function summaryHTML(){
     html += '<li class="strong">B. 수수료+공정관리비 소계<span class="amt">'+won(t.indirectTotal)+'</span></li>';
   } else {
     html += '<li class="strong">A. 직접공사비 소계<span class="amt">'+won(t.directTotal)+'</span></li>';
-    html += '<li class="indent">일반관리비 (2.5%)<span class="amt">'+won(t.indGen)+'</span></li>';
-    html += '<li class="indent">공과잡비 (1.0%)<span class="amt">'+won(t.indMisc)+'</span></li>';
+    t.indirectItems.forEach(it=>{
+      html += '<li class="indent indirect-item-li">'+
+        '<label class="indirect-check-label"><input type="checkbox" data-role="indirect-check" data-id="'+it.id+'" '+(it.checked?'checked':'')+'> '+escapeHtml(it.label)+' ('+(Number(it.percent)||0)+'%)</label>'+
+        '<span class="amt">'+won(it.amt)+'</span></li>';
+    });
     html += '<li class="strong">B. 간접공사비 소계<span class="amt">'+won(t.indirectTotal)+'</span></li>';
   }
-  html += '<li class="strong">소계 (A+B)<span class="amt">'+won(t.subtotal)+'</span></li>';
-  html += '<li>'+(t.isDirect ? '부가가치세'+(((t.vatOnFee?1:0)+(t.itemVat>0?1:0))>1 ? ' (수수료+항목별)' : (t.vatOnFee?' (수수료 10%)':(t.itemVat>0?' (항목별)':' (미포함)'))) : '부가가치세 (10%)')+'<span class="amt">'+won(t.vat)+'</span></li>';
+  html += '<li class="strong">소계 (A+B)<span class="amt">'+won(t.subtotalAB!==undefined?t.subtotalAB:t.subtotal)+'</span></li>';
+  if(!t.isDirect){
+    html += '<li class="adjustment-li">금액 조정 <span class="adj-neg-tag">(－)</span><input type="text" inputmode="numeric" class="money-input adjustment-input" id="price-adjustment-input" value="'+fmtNum(t.adjustment||0)+'" placeholder="0"></li>';
+    html += '<li class="strong">조정 후 금액<span class="amt" id="after-adjustment-amt">'+won(t.afterAdjustment)+'</span></li>';
+    html += '<li class="vat-toggle-li"><label class="indirect-check-label"><input type="checkbox" id="vat-included-check" '+(t.vatIncluded?'checked':'')+'> 부가가치세 (10%) 포함</label><span class="amt" id="vat-amt-display">'+won(t.vat)+'</span></li>';
+  } else {
+    html += '<li>'+(((t.vatOnFee?1:0)+(t.itemVat>0?1:0))>1 ? '부가가치세 (수수료+항목별)' : (t.vatOnFee?'부가가치세 (수수료 10%)':(t.itemVat>0?'부가가치세 (항목별)':'부가가치세 (미포함)')))+'<span class="amt">'+won(t.vat)+'</span></li>';
+  }
   html += '</ul>';
-  html += '<div class="total-card"><div class="label">총 공사 견적 금액</div><div class="value">₩ '+won(t.grand)+'</div><div class="vat-note">부가가치세 포함 금액입니다</div></div>';
+  html += '<div class="total-card"><div class="label">총 공사 견적 금액</div><div class="value" id="grand-total-display">₩ '+won(t.grand)+'</div><div class="vat-note">부가가치세 포함 금액입니다</div></div>';
   if(t.optionDirect>0){
     html += '<div class="option-note-box">'+
       '<div class="option-note-label">옵션 항목 (참고용, 위 총액에 미포함)</div>'+
@@ -3467,6 +3556,15 @@ function summaryHTML(){
   html += '<div class="footnote">상단 "항목별 상세설정"을 켜면 이 견적서 안에서만 재료비·노무비·경비·마진율을 조정할 수 있어요 (기본 단가표엔 영향 없음). "제품에서 고르기"를 켜면 등록해둔 제품을 드롭다운으로 바로 불러올 수 있어요.</div>';
   return html;
 }
+function updateSummaryLiveAmounts(){
+  const t = computeTotals();
+  const el1 = document.getElementById('after-adjustment-amt');
+  if(el1) el1.textContent = won(t.afterAdjustment);
+  const el2 = document.getElementById('vat-amt-display');
+  if(el2) el2.textContent = won(t.vat);
+  const el3 = document.getElementById('grand-total-display');
+  if(el3) el3.textContent = '₩ '+won(t.grand);
+}
 function renderSummary(){
   saveDraft();
   $summary.innerHTML = summaryHTML();
@@ -3479,6 +3577,26 @@ function bindSummaryEvents(){
   });
   const noteInput = document.getElementById('quote-note-input');
   if(noteInput) noteInput.addEventListener('input', e=>{ state.meta.note = e.target.value; saveDraft(); });
+  $summary.querySelectorAll('[data-role="indirect-check"]').forEach(el=>{
+    el.addEventListener('change', e=>{
+      state.indirectChecked[e.target.dataset.id] = e.target.checked;
+      saveDraft();
+      renderSummary();
+    });
+  });
+  const adjInput = document.getElementById('price-adjustment-input');
+  if(adjInput) adjInput.addEventListener('input', e=>{
+    state.meta.priceAdjustment = parseCommaNum(e.target.value);
+    saveDraft();
+    updateSummaryLiveAmounts();
+    renderNav();
+  });
+  const vatCheck = document.getElementById('vat-included-check');
+  if(vatCheck) vatCheck.addEventListener('change', e=>{
+    state.meta.vatIncludedTurnkey = e.target.checked;
+    saveDraft();
+    updateSummaryLiveAmounts();
+  });
   document.getElementById('btn-reset').addEventListener('click', ()=>{
     if(confirm('입력한 모든 수량과 선택 항목을 초기화하고 처음부터 다시 시작할까요? (단가·마진 설정은 유지됩니다)')){
       state.qty = {}; state.custom = {}; state.selected = {};
@@ -3665,9 +3783,11 @@ function buildPrintView(){
     '<table class="p-table"><thead><tr><th>품명 / 규격</th><th>단위</th><th class="p-right">재료비</th><th class="p-right">노무비</th><th class="p-right">경비</th><th class="p-right">수량</th><th class="p-right">금액</th></tr></thead><tbody>'+rows+'</tbody></table>'+
     '<table class="p-totals"><tbody>'+
       '<tr><td>'+(t.isDirect?'A. 실행원가 소계 (마진 0%)':'A. 직접공사비 소계')+'</td><td class="p-right">'+won(t.directTotal)+' 원</td></tr>'+
-      '<tr><td>'+(t.isDirect?'B. 수수료+공정관리비 소계':'B. 간접공사비 소계 (관리비+잡비)')+'</td><td class="p-right">'+won(t.indirectTotal)+' 원</td></tr>'+
-      '<tr><td>소계</td><td class="p-right">'+won(t.subtotal)+' 원</td></tr>'+
-      '<tr><td>'+(t.isDirect ? '부가가치세'+(((t.vatOnFee?1:0)+(t.itemVat>0?1:0))>1 ? ' (수수료+항목별)' : (t.vatOnFee?' (수수료 10%)':(t.itemVat>0?' (항목별)':' (미포함)'))) : '부가가치세 (10%)')+'</td><td class="p-right">'+won(t.vat)+' 원</td></tr>'+
+      (t.isDirect ? '' : t.indirectItems.filter(it=>it.checked).map(it=>'<tr><td class="p-indent">'+escapeHtml(it.label)+' ('+(Number(it.percent)||0)+'%)</td><td class="p-right">'+won(it.amt)+' 원</td></tr>').join(''))+
+      '<tr><td>'+(t.isDirect?'B. 수수료+공정관리비 소계':'B. 간접공사비 소계')+'</td><td class="p-right">'+won(t.indirectTotal)+' 원</td></tr>'+
+      '<tr><td>소계 (A+B)</td><td class="p-right">'+won(t.isDirect?t.subtotal:t.subtotalAB)+' 원</td></tr>'+
+      (!t.isDirect && t.adjustment>0 ? '<tr><td>금액 조정 (－)</td><td class="p-right">－'+won(t.adjustment)+' 원</td></tr>' : '')+
+      '<tr><td>'+(t.isDirect ? '부가가치세'+(((t.vatOnFee?1:0)+(t.itemVat>0?1:0))>1 ? ' (수수료+항목별)' : (t.vatOnFee?' (수수료 10%)':(t.itemVat>0?' (항목별)':' (미포함)'))) : '부가가치세'+(t.vatIncluded?' (10%)':' (미포함)'))+'</td><td class="p-right">'+won(t.vat)+' 원</td></tr>'+
       '<tr class="final"><td>총 계</td><td class="p-right">'+won(t.grand)+' 원</td></tr>'+
     '</tbody></table>'+
     (optionRows ? ''+
