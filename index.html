@@ -1182,11 +1182,22 @@ function renderSites(){
           '<div class="site-card-sub">'+(cust?escapeHtml(cust.name)+' · ':'')+escapeHtml(s.address||'')+'</div>'+
         '</div>'+
         '<div class="site-card-meta">'+d+' 생성 · 일정 '+evts.length+'건'+(upcoming?' · 확정 대기 '+upcoming+'건':'')+'</div>'+
+        '<button class="btn-remove" data-role="delete-site" data-id="'+s.id+'" title="완전히 삭제">×</button>'+
       '</div>';
     });
     html += '</div>';
   }
   $main.innerHTML = html;
+  $main.querySelectorAll('[data-role="delete-site"]').forEach(el=>{
+    el.addEventListener('click', async (ev)=>{
+      ev.stopPropagation();
+      if(!confirm('이 현장을 완전히 삭제할까요? 연결된 일정은 남아있지만 현장 정보와는 연결이 끊겨요. 되돌릴 수 없어요.')) return;
+      const { error } = await sb.from('sites').delete().eq('id', el.dataset.id);
+      if(error){ alert('삭제 실패: '+error.message); return; }
+      state.sites = state.sites.filter(s=>s.id!==el.dataset.id);
+      renderMain();
+    });
+  });
   $main.querySelectorAll('[data-open-site]').forEach(el=>{
     el.addEventListener('click', ()=>{ openSiteDetail(el.dataset.openSite); });
   });
@@ -1516,8 +1527,18 @@ async function renderContractsHub(){
           '<div class="ct-hub-meta">'+d+' 생성 · '+(c.quote_type==='direct'?'직영':'턴키')+' · 총 ₩ '+won(c.total||0)+'</div>'+
         '</div>'+
         '<a class="btn btn-secondary btn-sm" href="'+escapeHtml(link)+'" target="_blank" rel="noopener">미리보기 →</a>'+
+        '<button class="btn-remove" data-role="delete-contract" data-id="'+c.id+'" title="완전히 삭제">×</button>'+
       '</div>';
     }).join('');
+    box.querySelectorAll('[data-role="delete-contract"]').forEach(el=>{
+      el.addEventListener('click', async ()=>{
+        if(!confirm('이 계약서를 완전히 삭제할까요? 되돌릴 수 없어요.')) return;
+        await sb.from('contracts').delete().eq('id', el.dataset.id);
+        const idx = list.findIndex(c=>c.id===el.dataset.id);
+        if(idx>-1) list.splice(idx,1);
+        render(document.getElementById('ct-hub-search').value.trim());
+      });
+    });
   }
   render('');
   document.getElementById('ct-hub-search').addEventListener('input', e=>render(e.target.value.trim()));
