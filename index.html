@@ -1465,6 +1465,14 @@ async function renderEstimateHub(){
         renderMain();
       });
     });
+    box.querySelectorAll('[data-role="delete-quote"]').forEach(el=>{
+      el.addEventListener('click', async (ev)=>{
+        ev.stopPropagation();
+        if(!confirm('이 견적서를 완전히 삭제할까요? 되돌릴 수 없어요.')) return;
+        await sb.from('quotes').delete().eq('id', el.dataset.qid);
+        renderMain();
+      });
+    });
   }
   renderList('');
   document.getElementById('est-hub-search').addEventListener('input', e=> renderList(e.target.value.trim()));
@@ -1475,6 +1483,7 @@ function estHubQuoteRowHTML(q){
     '<span class="est-hub-quote-name">'+escapeHtml(q.label)+'</span>'+
     '<span class="est-hub-quote-meta">'+d+' · ₩ '+won(q.total||0)+'</span>'+
     '<button class="btn-remove" data-role="archive-quote" data-qid="'+q.id+'" title="보관함으로 이동">🗄️</button>'+
+    '<button class="btn-remove" data-role="delete-quote" data-qid="'+q.id+'" title="완전히 삭제">×</button>'+
   '</div>';
 }
 /* ============ 계약관리: 전체 고객 계약서 현황 ============ */
