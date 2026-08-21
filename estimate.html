@@ -1551,26 +1551,35 @@ function autoQuoteLabel(){
   const custPart = state.meta.customer ? state.meta.customer+' 고객님' : base;
   return custPart+' '+yy+mm+dd;
 }
-async function uniqueQuoteLabel(){
-  const base = autoQuoteLabel();
-  // 같은 날짜에 이미 저장된 이름이 있으면 뒤에 _1, _2, _3 ... 붙여서 겹치지 않게 함
-  let query = sb.from('quotes').select('label').ilike('label', base+'%');
+async function ensureUniqueLabel(label){
+  // 같은 이름이 이미 저장돼있으면 뒤에 _1, _2, _3 ... 붙여서 겹치지 않게 함
+  const cleanBase = label.replace(/_\d+$/, '');
+  let query = sb.from('quotes').select('label').ilike('label', cleanBase+'%');
   if(state.customerId) query = query.eq('customer_id', state.customerId);
   const { data } = await query;
   const existing = new Set((data||[]).map(r=>r.label));
-  if(!existing.has(base)) return base;
+  if(!existing.has(label)) return label; // 정확히 같은 이름이 아직 없으면 그대로 사용
   let n = 1;
-  while(existing.has(base+'_'+n)) n++;
-  return base+'_'+n;
+  while(existing.has(cleanBase+'_'+n)) n++;
+  return cleanBase+'_'+n;
+}
+async function uniqueQuoteLabel(){
+  return ensureUniqueLabel(autoQuoteLabel());
 }
 async function saveCurrentAsSnapshot(label, forceNew){
   const t = computeTotals();
-  const id = (!forceNew && state.currentQuoteId) ? state.currentQuoteId : uid('q');
+  const isNewRow = forceNew || !state.currentQuoteId;
+  const id = isNewRow ? uid('q') : state.currentQuoteId;
+  let finalLabel = label || autoQuoteLabel();
+  if(isNewRow){
+    // 새로 저장되는 견적일 때는 저장 직전에 항상 다시 이름 중복 확인 (연속 저장 시에도 겹치지 않게)
+    finalLabel = await ensureUniqueLabel(finalLabel);
+  }
   const { data: { user } } = await sb.auth.getUser();
   const row = {
     id,
     customer_id: state.customerId || null,
-    label: label || autoQuoteLabel(),
+    label: finalLabel,
     total: t.grand,
     quote_type: state.meta.quoteType || 'turnkey',
     created_by: user ? user.id : null,
