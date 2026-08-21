@@ -416,15 +416,19 @@ table.items tbody tr:hover{background:#FCFAF4;}
 table.items tbody tr.has-qty{background:#FBF6E9;}
 table.items tbody tr.has-qty:hover{background:#F8F0DC;}
 .col-idx{width:34px; color:var(--ink-faint); font-size:11.5px;}
-.col-name{min-width:190px;}
+.col-name{min-width:170px;}
 .item-name{font-weight:600; font-size:13.5px;}
 .item-spec{font-size:11.5px; color:var(--ink-faint); margin-top:1px;}
+.col-note{width:110px;}
+.note-input{width:100%; padding:5px 7px; border:1.3px solid var(--line-strong); border-radius:6px; font-size:11.5px; color:var(--ink-dim);}
 .col-unit{width:44px; color:var(--ink-dim); font-size:12.5px; text-align:center;}
 .col-price{width:96px; text-align:right; font-size:12.5px; color:var(--ink-dim);}
 .col-cost{width:88px; text-align:right; font-size:12px; color:var(--ink-dim);}
 .col-opt{width:56px; text-align:center;}
 .col-qty{width:96px;}
 .col-amt{width:112px; text-align:right; font-weight:700; font-size:13px;}
+.col-actions{width:96px; text-align:right; white-space:nowrap;}
+.col-actions .btn-copy-item{margin-right:4px;}
 
 .qty-input{
   width:78px;
@@ -2148,15 +2152,18 @@ function itemRowHTML(group, i){
   '<tr class="'+(st.q>0?'has-qty':'')+(adj?' qadjust-row':'')+'">'+
     '<td class="col-idx num">'+(i+1)+'</td>'+
     '<td class="col-name"><div class="item-name">'+escapeHtml(it.n)+'</div>'+variantPicker+(!variantPicker && it.s?'<div class="item-spec">'+escapeHtml(it.s)+'</div>':'')+(adj?'<div class="item-spec">개별 마진율 '+marginCell+' %</div>':'')+productPicker+'</td>'+
+    '<td class="col-note"><input type="text" class="note-input" placeholder="비고" value="'+escapeHtml(it.note||'')+'" data-role="item-note" data-group="'+group+'" data-i="'+i+'"></td>'+
     '<td class="col-unit">'+escapeHtml(it.u)+'</td>'+
     '<td class="col-cost num">'+costCell(parts.mat,'mat')+'</td>'+
     '<td class="col-cost num">'+costCell(parts.labor,'labor')+'</td>'+
     '<td class="col-cost num">'+costCell(parts.exp,'exp')+'</td>'+
     '<td class="col-opt"><input type="checkbox" class="opt-check" '+(st.opt?'checked':'')+' data-role="opt" data-group="'+group+'" data-i="'+i+'" title="옵션 공사로 표시"></td>'+
     '<td class="col-qty"><input type="number" min="0" step="1" class="qty-input num" value="'+(st.q||'')+'" placeholder="0" data-role="qty" data-group="'+group+'" data-i="'+i+'" onfocus="this.select()"></td>'+
-    '<td class="col-amt num"><span class="amt-text">'+(st.q>0? won(amt) : '')+'</span> '+
+    '<td class="col-amt num"><span class="amt-text">'+(st.q>0? won(amt) : '')+'</span></td>'+
+    '<td class="col-actions">'+
       '<button class="btn-secondary btn-copy-item" data-role="copy-item" data-group="'+group+'" data-i="'+i+'" title="'+(variants.length>1?'다른 하위그룹으로 하나 더 추가':'이 항목 복사해서 하나 더 추가')+'">복사</button>'+
-      ' <button class="btn-remove" data-role="item-del" data-group="'+group+'" data-i="'+i+'" title="이 견적에서 삭제">×</button></td>'+
+      '<button class="btn-remove" data-role="item-del" data-group="'+group+'" data-i="'+i+'" title="이 견적에서 삭제">×</button>'+
+    '</td>'+
   '</tr>';
 }
 function customRowHTML(group, it){
@@ -2184,11 +2191,13 @@ function customRowHTML(group, it){
   '<tr class="custom-row '+(it.q>0?'has-qty':'')+'">'+
     '<td class="col-idx num">＋</td>'+
     '<td class="col-name"><div class="item-name">'+escapeHtml(it.n)+(isCopy||it.applyMargin?'':' <span style="color:var(--accent);font-size:10.5px;font-weight:700;">직접입력</span>')+'</div>'+specCell+'</td>'+
+    '<td class="col-note"><input type="text" class="note-input" placeholder="비고" value="'+escapeHtml(it.note||'')+'" data-role="custom-note" data-group="'+group+'" data-id="'+it.id+'"></td>'+
     '<td class="col-unit">'+escapeHtml(it.u)+'</td>'+
     costCells+
     '<td class="col-opt"><input type="checkbox" class="opt-check" '+(it.opt?'checked':'')+' data-role="c-opt" data-group="'+group+'" data-id="'+it.id+'"></td>'+
     '<td class="col-qty"><input type="number" min="0" step="1" class="qty-input num" value="'+(it.q||'')+'" data-role="c-qty" data-group="'+group+'" data-id="'+it.id+'" onfocus="this.select()"></td>'+
-    '<td class="col-amt num"><span class="amt-text">'+(it.q>0? won(amt):'')+'</span> <button class="btn-remove" data-role="c-del" data-group="'+group+'" data-id="'+it.id+'" title="삭제">×</button></td>'+
+    '<td class="col-amt num"><span class="amt-text">'+(it.q>0? won(amt):'')+'</span></td>'+
+    '<td class="col-actions"><button class="btn-remove" data-role="c-del" data-group="'+group+'" data-id="'+it.id+'" title="삭제">×</button></td>'+
   '</tr>';
 }
 function windowCalcBoxHTML(group){
@@ -2276,8 +2285,8 @@ function quoteTableHTML(group){
     out += ''+
     '<table class="items">'+
       '<thead><tr>'+
-        '<th class="col-idx">No</th><th class="col-name">품명 / 규격</th><th class="col-unit">단위</th>'+
-        '<th class="col-cost">재료비</th><th class="col-cost">노무비</th><th class="col-cost">경비</th><th class="col-opt">옵션</th><th class="col-qty">수량</th><th class="col-amt">금액</th>'+
+        '<th class="col-idx">No</th><th class="col-name">품명 / 규격</th><th class="col-note">비고</th><th class="col-unit">단위</th>'+
+        '<th class="col-cost">재료비</th><th class="col-cost">노무비</th><th class="col-cost">경비</th><th class="col-opt">옵션</th><th class="col-qty">수량</th><th class="col-amt">금액</th><th class="col-actions"></th>'+
       '</tr></thead>'+
       '<tbody>'+rows+'</tbody>'+
     '</table>'+
@@ -2897,6 +2906,17 @@ function bindMainEvents(){
       el.addEventListener('click', e=>{
         const group = e.target.dataset.group, i = parseInt(e.target.dataset.i,10);
         copyItemAsCustom(group, i);
+      });
+    });
+    $main.querySelectorAll('[data-role="item-note"]').forEach(el=>{
+      el.addEventListener('input', e=>{
+        setQuoteItemField(e.target.dataset.group, parseInt(e.target.dataset.i,10), 'note', e.target.value);
+      });
+    });
+    $main.querySelectorAll('[data-role="custom-note"]').forEach(el=>{
+      el.addEventListener('input', e=>{
+        updateCustom(e.target.dataset.group, e.target.dataset.id, {note:e.target.value});
+        saveDraft();
       });
     });
     $main.querySelectorAll('[data-role="new-add"]').forEach(el=>{
@@ -3522,7 +3542,7 @@ function buildPrintView(){
           const parts = rowPriceParts(group,i);
           const price = parts.mat+parts.labor+parts.exp;
           const amt = lineAmt(price,st.q);
-          const rowHtml = '<tr><td>'+escapeHtml(it.n)+(it.s?' <span style="color:#888">('+escapeHtml(it.s)+')</span>':'')+'</td><td>'+escapeHtml(it.u)+'</td>'+
+          const rowHtml = '<tr><td>'+escapeHtml(it.n)+(it.s?' <span style="color:#888">('+escapeHtml(it.s)+')</span>':'')+(it.note?' <span style="color:#B5842C">['+escapeHtml(it.note)+']</span>':'')+'</td><td>'+escapeHtml(it.u)+'</td>'+
             '<td class="p-right">'+(parts.mat>0?won(parts.mat):'-')+'</td><td class="p-right">'+(parts.labor>0?won(parts.labor):'-')+'</td><td class="p-right">'+(parts.exp>0?won(parts.exp):'-')+'</td>'+
             '<td class="p-right">'+st.q+'</td><td class="p-right">'+won(amt)+'</td></tr>';
           if(st.opt) optionRows += '<tr><td>'+meta.no+'. '+meta.title+' — '+escapeHtml(it.n)+(it.s?' ('+escapeHtml(it.s)+')':'')+'</td><td>'+escapeHtml(it.u)+'</td><td class="p-right">'+st.q+'</td><td class="p-right">'+won(amt)+'</td></tr>';
@@ -3533,7 +3553,7 @@ function buildPrintView(){
         if(it.q>0){
           const effPrice = customEffectivePrice(group, it);
           const amt = lineAmt(effPrice,it.q);
-          const rowHtml = '<tr><td>'+escapeHtml(it.n)+(it.s?' <span style="color:#888">('+escapeHtml(it.s)+')</span>':'')+'</td><td>'+escapeHtml(it.u)+'</td>'+
+          const rowHtml = '<tr><td>'+escapeHtml(it.n)+(it.s?' <span style="color:#888">('+escapeHtml(it.s)+')</span>':'')+(it.note?' <span style="color:#B5842C">['+escapeHtml(it.note)+']</span>':'')+'</td><td>'+escapeHtml(it.u)+'</td>'+
             '<td class="p-right">'+won(effPrice)+'</td><td class="p-right">-</td><td class="p-right">-</td>'+
             '<td class="p-right">'+it.q+'</td><td class="p-right">'+won(amt)+'</td></tr>';
           if(it.opt) optionRows += '<tr><td>'+meta.no+'. '+meta.title+' — '+escapeHtml(it.n)+(it.s?' ('+escapeHtml(it.s)+')':'')+'</td><td>'+escapeHtml(it.u)+'</td><td class="p-right">'+it.q+'</td><td class="p-right">'+won(amt)+'</td></tr>';
