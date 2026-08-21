@@ -934,7 +934,6 @@ const state = {
   quoteItemOverride: {},    // 이 견적서 전용 단가·마진 수정값 (key `${group}|${i}` -> {mat?,labor?,exp?,mo?}) - 서버 기본 단가표에는 영향 없음
   carpenterDaysOverride: {}, // 목공사 품수 수동 조정값 (group -> number|null)
 };
-let customSeq = 1;
 function uid(prefix){
   if(window.crypto && crypto.randomUUID) return crypto.randomUUID();
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c){
@@ -1274,7 +1273,7 @@ function getCustomList(group){
 function addCustom(group, n, s, u, p, opt, sourceIndex, variantIdx, parts){
   if(!n || !p) return;
   const list = getCustomList(group).slice();
-  const item = {id:"c"+(customSeq++), n:n, s:s||'', u:u||'식', p:Number(p)||0, q:1, opt:!!opt};
+  const item = {id:"c"+uid(), n:n, s:s||'', u:u||'식', p:Number(p)||0, q:1, opt:!!opt};
   if(sourceIndex !== undefined){
     item.sourceIndex = sourceIndex; item.variantIdx = variantIdx;
     if(parts){ item.mat = parts.mat; item.labor = parts.labor; item.exp = parts.exp; }
@@ -1299,7 +1298,7 @@ function addWindowCustomItem(group, position, widthMm, heightMm, unitPrice){
   if(!position || jp<=0 || !unitPrice) return;
   const list = getCustomList(group).slice();
   const label = position+' ('+widthMm+'×'+heightMm+'mm)';
-  list.push({id:"c"+(customSeq++), n:label, u:'자평', p:Number(unitPrice)||0, q:Math.round(jp*100)/100, opt:false});
+  list.push({id:"c"+uid(), n:label, u:'자평', p:Number(unitPrice)||0, q:Math.round(jp*100)/100, opt:false});
   state.custom[group] = list;
   renderAll();
 }
@@ -1309,7 +1308,7 @@ function addSashCustomItem(group, position, windowType, widthMm, heightMm, glass
   const list = getCustomList(group).slice();
   const name = position ? position+' '+windowType : windowType;
   const spec = widthMm+'×'+heightMm+'mm'+(glassSpec?' · '+glassSpec:'')+' (자평 '+jp.toFixed(2)+')';
-  list.push({id:"c"+(customSeq++), n:name, s:spec, u:'식', p:Number(amount)||0, q:1, opt:false, applyMargin:true});
+  list.push({id:"c"+uid(), n:name, s:spec, u:'식', p:Number(amount)||0, q:1, opt:false, applyMargin:true});
   state.custom[group] = list;
   renderAll();
 }
