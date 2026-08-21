@@ -415,6 +415,10 @@ table.items tbody tr:last-child td{border-bottom:none;}
 table.items tbody tr:hover{background:#FCFAF4;}
 table.items tbody tr.has-qty{background:#FBF6E9;}
 table.items tbody tr.has-qty:hover{background:#F8F0DC;}
+.col-drag{width:22px; text-align:center;}
+.row-drag-handle{cursor:grab; font-size:13px; color:var(--ink-faint);}
+table.items tbody tr.dragging{opacity:.4;}
+table.items tbody tr.drag-over{outline:2px dashed var(--accent); outline-offset:-2px;}
 .col-idx{width:34px; color:var(--ink-faint); font-size:11.5px;}
 .col-name{min-width:170px;}
 .item-name{font-weight:600; font-size:13.5px;}
@@ -880,6 +884,7 @@ const state = {
   selected: {},       // key `${group}|${i}` -> true  (체크리스트에서 선택된 항목)
   selectedVariant: {}, // key `${group}|${i}` -> 하위그룹 인덱스 (미지정 시 기본값 사용)
   bathroomCount: 1,    // 욕실 공사 개소 수 (1~4)
+  rowOrder: {},         // key: group -> [row-key,...] 견적 작성 화면에서 드래그로 바꾼 항목 표시 순서
   phase: "picker",    // "picker" | "select" | "build"  (견적 작성 진행 단계)
   flow: null,         // "solo" | "consult"  (혼자 작업 / 고객 상담 모드)
   selectIdx: 0,       // (미사용 - 이전 버전 호환용)
@@ -1447,7 +1452,7 @@ function saveDraft(){
       qty: state.qty, custom: state.custom,
       meta: state.meta, selected: state.selected, selectedVariant: state.selectedVariant, bathroomCount: state.bathroomCount, phase: state.phase, flow: state.flow, selectIdx: state.selectIdx, catView: state.catView,
       customerId: state.customerId, currentQuoteId: state.currentQuoteId,
-      carpenterDaysOverride: state.carpenterDaysOverride, quoteItemOverride: state.quoteItemOverride, quoteAdjustMode: state.quoteAdjustMode, productPickMode: state.productPickMode,
+      carpenterDaysOverride: state.carpenterDaysOverride, quoteItemOverride: state.quoteItemOverride, quoteAdjustMode: state.quoteAdjustMode, productPickMode: state.productPickMode, rowOrder: state.rowOrder,
     }));
   }catch(e){ /* storage unavailable (e.g. private mode) -- fail silently */ }
 }
@@ -1471,6 +1476,7 @@ function loadDraft(){
     state.carpenterDaysOverride = obj.carpenterDaysOverride || {};
     state.quoteItemOverride = obj.quoteItemOverride || {};
     state.quoteAdjustMode = obj.quoteAdjustMode || false;
+    state.rowOrder = obj.rowOrder || {};
     state.productPickMode = obj.productPickMode || false;
     if(state.phase === 'build' && selectedCountAll()===0) backfillSelectedFromQty();
   }catch(e){ /* ignore corrupt draft */ }
@@ -1507,7 +1513,7 @@ async function saveCurrentAsSnapshot(label, forceNew){
     snapshot: {
       qty: state.qty, custom: state.custom,
       priceOverride: state.priceOverride, marginOverride: state.marginOverride,
-      meta: state.meta, selected: state.selected, selectedVariant: state.selectedVariant, bathroomCount: state.bathroomCount, carpenterDaysOverride: state.carpenterDaysOverride, quoteItemOverride: state.quoteItemOverride,
+      meta: state.meta, selected: state.selected, selectedVariant: state.selectedVariant, bathroomCount: state.bathroomCount, carpenterDaysOverride: state.carpenterDaysOverride, quoteItemOverride: state.quoteItemOverride, rowOrder: state.rowOrder,
     },
   };
   const { error } = await sb.from('quotes').upsert(row);
@@ -1530,6 +1536,7 @@ async function loadSnapshot(id){
   state.selected = d.selected || {};
   state.selectedVariant = d.selectedVariant || {};
   state.bathroomCount = d.bathroomCount || 1;
+  state.rowOrder = d.rowOrder || {};
   state.carpenterDaysOverride = d.carpenterDaysOverride || {};
   state.quoteItemOverride = d.quoteItemOverride || {};
   if(selectedCountAll()===0) backfillSelectedFromQty();
@@ -2149,17 +2156,18 @@ function itemRowHTML(group, i){
       '</select>'
     : '';
   return ''+
-  '<tr class="'+(st.q>0?'has-qty':'')+(adj?' qadjust-row':'')+'">'+
+  '<tr class="'+(st.q>0?'has-qty':'')+(adj?' qadjust-row':'')+'" draggable="false" data-row-key="cat:'+i+'">'+
+    '<td class="col-drag"><span class="row-drag-handle" title="드래그해서 순서 변경">⋮⋮</span></td>'+
     '<td class="col-idx num">'+(i+1)+'</td>'+
     '<td class="col-name"><div class="item-name">'+escapeHtml(it.n)+'</div>'+variantPicker+(!variantPicker && it.s?'<div class="item-spec">'+escapeHtml(it.s)+'</div>':'')+(adj?'<div class="item-spec">개별 마진율 '+marginCell+' %</div>':'')+productPicker+'</td>'+
-    '<td class="col-note"><input type="text" class="note-input" placeholder="비고" value="'+escapeHtml(it.note||'')+'" data-role="item-note" data-group="'+group+'" data-i="'+i+'"></td>'+
     '<td class="col-unit">'+escapeHtml(it.u)+'</td>'+
+    '<td class="col-qty"><input type="number" min="0" step="1" class="qty-input num" value="'+(st.q||'')+'" placeholder="0" data-role="qty" data-group="'+group+'" data-i="'+i+'" onfocus="this.select()"></td>'+
     '<td class="col-cost num">'+costCell(parts.mat,'mat')+'</td>'+
     '<td class="col-cost num">'+costCell(parts.labor,'labor')+'</td>'+
     '<td class="col-cost num">'+costCell(parts.exp,'exp')+'</td>'+
-    '<td class="col-opt"><input type="checkbox" class="opt-check" '+(st.opt?'checked':'')+' data-role="opt" data-group="'+group+'" data-i="'+i+'" title="옵션 공사로 표시"></td>'+
-    '<td class="col-qty"><input type="number" min="0" step="1" class="qty-input num" value="'+(st.q||'')+'" placeholder="0" data-role="qty" data-group="'+group+'" data-i="'+i+'" onfocus="this.select()"></td>'+
     '<td class="col-amt num"><span class="amt-text">'+(st.q>0? won(amt) : '')+'</span></td>'+
+    '<td class="col-note"><input type="text" class="note-input" placeholder="비고" value="'+escapeHtml(it.note||'')+'" data-role="item-note" data-group="'+group+'" data-i="'+i+'"></td>'+
+    '<td class="col-opt"><input type="checkbox" class="opt-check" '+(st.opt?'checked':'')+' data-role="opt" data-group="'+group+'" data-i="'+i+'" title="옵션 공사로 표시"></td>'+
     '<td class="col-actions">'+
       '<button class="btn-secondary btn-copy-item" data-role="copy-item" data-group="'+group+'" data-i="'+i+'" title="'+(variants.length>1?'다른 하위그룹으로 하나 더 추가':'이 항목 복사해서 하나 더 추가')+'">복사</button>'+
       '<button class="btn-remove" data-role="item-del" data-group="'+group+'" data-i="'+i+'" title="이 견적에서 삭제">×</button>'+
@@ -2188,15 +2196,16 @@ function customRowHTML(group, it){
     ? '<td class="col-cost num">'+(it.mat>0?won(it.mat):'')+'</td><td class="col-cost num">'+(it.labor>0?won(it.labor):'')+'</td><td class="col-cost num">'+(it.exp>0?won(it.exp):'')+'</td>'
     : '<td class="col-cost num">'+won(effPrice)+'</td><td class="col-cost num"></td><td class="col-cost num"></td>';
   return ''+
-  '<tr class="custom-row '+(it.q>0?'has-qty':'')+'">'+
+  '<tr class="custom-row '+(it.q>0?'has-qty':'')+'" draggable="false" data-row-key="custom:'+it.id+'">'+
+    '<td class="col-drag"><span class="row-drag-handle" title="드래그해서 순서 변경">⋮⋮</span></td>'+
     '<td class="col-idx num">＋</td>'+
     '<td class="col-name"><div class="item-name">'+escapeHtml(it.n)+(isCopy||it.applyMargin?'':' <span style="color:var(--accent);font-size:10.5px;font-weight:700;">직접입력</span>')+'</div>'+specCell+'</td>'+
-    '<td class="col-note"><input type="text" class="note-input" placeholder="비고" value="'+escapeHtml(it.note||'')+'" data-role="custom-note" data-group="'+group+'" data-id="'+it.id+'"></td>'+
     '<td class="col-unit">'+escapeHtml(it.u)+'</td>'+
-    costCells+
-    '<td class="col-opt"><input type="checkbox" class="opt-check" '+(it.opt?'checked':'')+' data-role="c-opt" data-group="'+group+'" data-id="'+it.id+'"></td>'+
     '<td class="col-qty"><input type="number" min="0" step="1" class="qty-input num" value="'+(it.q||'')+'" data-role="c-qty" data-group="'+group+'" data-id="'+it.id+'" onfocus="this.select()"></td>'+
+    costCells+
     '<td class="col-amt num"><span class="amt-text">'+(it.q>0? won(amt):'')+'</span></td>'+
+    '<td class="col-note"><input type="text" class="note-input" placeholder="비고" value="'+escapeHtml(it.note||'')+'" data-role="custom-note" data-group="'+group+'" data-id="'+it.id+'"></td>'+
+    '<td class="col-opt"><input type="checkbox" class="opt-check" '+(it.opt?'checked':'')+' data-role="c-opt" data-group="'+group+'" data-id="'+it.id+'"></td>'+
     '<td class="col-actions"><button class="btn-remove" data-role="c-del" data-group="'+group+'" data-id="'+it.id+'" title="삭제">×</button></td>'+
   '</tr>';
 }
@@ -2268,14 +2277,30 @@ function refreshCarpenterDaysBox(group){
     if(amtSpan) amtSpan.textContent = '= ₩ '+won(days*wage);
   }
 }
+function applyRowOrder(group, entries){
+  // entries: [{key, html}] - 기본 순서. state.rowOrder[group]에 저장된 순서가 있으면 그 순서를 우선 적용.
+  const saved = (state.rowOrder && state.rowOrder[group]) || [];
+  if(saved.length === 0) return entries;
+  const byKey = {};
+  entries.forEach(e=>{ byKey[e.key] = e; });
+  const ordered = [];
+  saved.forEach(key=>{ if(byKey[key]){ ordered.push(byKey[key]); delete byKey[key]; } });
+  entries.forEach(e=>{ if(byKey[e.key]) ordered.push(e); }); // 순서에 없던 새 항목은 뒤에 붙임
+  return ordered;
+}
 function quoteTableHTML(group){
-  let rows = orderedItemIndices(group).map(i=>{
+  let entries = [];
+  orderedItemIndices(group).forEach(i=>{
     const eff = effItem(group,i);
-    if(!eff.n) return '';
-    if(!isItemSelected(group,i)) return '';
-    return itemRowHTML(group,i);
-  }).join('');
-  rows += getCustomList(group).map(it=>customRowHTML(group,it)).join('');
+    if(!eff.n) return;
+    if(!isItemSelected(group,i)) return;
+    entries.push({ key:'cat:'+i, html:itemRowHTML(group,i) });
+  });
+  getCustomList(group).forEach(it=>{
+    entries.push({ key:'custom:'+it.id, html:customRowHTML(group,it) });
+  });
+  entries = applyRowOrder(group, entries);
+  let rows = entries.map(e=>e.html).join('');
 
   let out = '';
   if(isCarpenterDirectGroup(group)) out += laborTopItemHTML(group); // 인건비(품수) 실제 견적 항목 - 상단 고정
@@ -2285,8 +2310,8 @@ function quoteTableHTML(group){
     out += ''+
     '<table class="items">'+
       '<thead><tr>'+
-        '<th class="col-idx">No</th><th class="col-name">품명 / 규격</th><th class="col-note">비고</th><th class="col-unit">단위</th>'+
-        '<th class="col-cost">재료비</th><th class="col-cost">노무비</th><th class="col-cost">경비</th><th class="col-opt">옵션</th><th class="col-qty">수량</th><th class="col-amt">금액</th><th class="col-actions"></th>'+
+        '<th class="col-drag"></th><th class="col-idx">No</th><th class="col-name">품명 / 규격</th><th class="col-unit">단위</th><th class="col-qty">수량</th>'+
+        '<th class="col-cost">재료비</th><th class="col-cost">노무비</th><th class="col-cost">경비</th><th class="col-amt">금액</th><th class="col-note">비고</th><th class="col-opt">옵션</th><th class="col-actions"></th>'+
       '</tr></thead>'+
       '<tbody>'+rows+'</tbody>'+
     '</table>'+
@@ -2756,6 +2781,54 @@ function renderMain(){
   bindMainEvents();
 }
 
+function bindRowDragReorder(){
+  let dragSrc = null;
+  $main.querySelectorAll('table.items tbody tr[data-row-key]').forEach(tr=>{
+    const handle = tr.querySelector('.row-drag-handle');
+    if(handle){
+      handle.addEventListener('mousedown', ()=>{ tr.setAttribute('draggable','true'); });
+      handle.addEventListener('touchstart', ()=>{ tr.setAttribute('draggable','true'); }, {passive:true});
+    }
+    tr.addEventListener('dragstart', ()=>{
+      dragSrc = tr.dataset.rowKey;
+      tr.classList.add('dragging');
+    });
+    tr.addEventListener('dragend', ()=>{
+      tr.classList.remove('dragging');
+      tr.setAttribute('draggable','false');
+    });
+    tr.addEventListener('dragover', e=>{ e.preventDefault(); tr.classList.add('drag-over'); });
+    tr.addEventListener('dragleave', ()=>{ tr.classList.remove('drag-over'); });
+    tr.addEventListener('drop', e=>{
+      e.preventDefault();
+      tr.classList.remove('drag-over');
+      if(!dragSrc) return;
+      const targetKey = tr.dataset.rowKey;
+      if(dragSrc === targetKey) { dragSrc = null; return; }
+      const groupEl = tr.querySelector('[data-group]');
+      const g = groupEl ? groupEl.dataset.group : null;
+      if(!g) { dragSrc = null; return; }
+      reorderRow(g, dragSrc, targetKey);
+      dragSrc = null;
+    });
+  });
+}
+function reorderRow(group, srcKey, targetKey){
+  // 현재 화면에 보이는 순서 그대로를 기준 배열로 만든 뒤, srcKey를 targetKey 위치로 옮김
+  const rows = Array.from($main.querySelectorAll('table.items tbody tr[data-row-key]')).filter(tr=>{
+    const anyInput = tr.querySelector('[data-group]');
+    return anyInput && anyInput.dataset.group === group;
+  });
+  let order = rows.map(tr=>tr.dataset.rowKey);
+  if(order.length===0) return;
+  const from = order.indexOf(srcKey), to = order.indexOf(targetKey);
+  if(from===-1 || to===-1) return;
+  order.splice(from,1);
+  order.splice(to,0,srcKey);
+  state.rowOrder[group] = order;
+  saveDraft();
+  renderMain();
+}
 function bindMainEvents(){
   const backBtn = document.querySelector('[data-role="back-to-select"]');
   if(backBtn) backBtn.addEventListener('click', ()=>{
@@ -2989,6 +3062,7 @@ function bindMainEvents(){
         renderNav(); renderSummaryOnly();
       });
     });
+    bindRowDragReorder();
   } else {
     // admin mode
     const wpAddBtn = document.getElementById('wp-add-btn');
