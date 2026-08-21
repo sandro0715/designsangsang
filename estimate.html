@@ -633,17 +633,22 @@ body.summary-collapsed .summary-toggle{transform:rotate(180deg);}
 /* ===== Print view ===== */
 #printArea{display:none;}
 @media print{
+  @page{ size: landscape; margin: 14mm; }
   body *{visibility:hidden;}
   #printArea, #printArea *{visibility:visible;}
   #printArea{display:block; position:absolute; top:0; left:0; width:100%; padding:24px; font-size:12px;}
-  .p-title{font-size:20px; font-weight:800; text-align:center; letter-spacing:.3em; margin-bottom:4px;}
+  .p-header{text-align:center; margin-bottom:4px;}
+  .p-title{font-size:22px; font-weight:800; letter-spacing:.3em; margin-bottom:4px;}
   .p-sub{text-align:center; font-size:10px; color:#666; margin-bottom:18px;}
   .p-meta{display:grid; grid-template-columns:1fr 1fr; gap:6px 24px; font-size:11px; margin-bottom:16px; border:1px solid #999; padding:10px 14px; border-radius:6px;}
   .p-meta div span{color:#666;}
+  .p-manager-row{position:relative;}
+  .p-stamp-box{display:inline-block; margin-left:10px; width:26px; height:26px; line-height:24px; text-align:center; border:1.3px solid #999; border-radius:50%; font-size:9px; color:#888; vertical-align:middle;}
   table.p-table{width:100%; border-collapse:collapse; margin-bottom:4px;}
   table.p-table th, table.p-table td{border:1px solid #ccc; padding:5px 7px; font-size:11px;}
   table.p-table th{background:#eee;}
   .p-cat-row td{background:#f7f5ee; font-weight:700;}
+  .p-cat-sub td{background:#fbfaf5; font-weight:700; color:#8A6F4E; border-top:1.3px solid #ccc;}
   .p-right{text-align:right;}
   .p-totals{width:320px; margin-left:auto; margin-top:12px; border-collapse:collapse;}
   .p-totals td{padding:5px 8px; font-size:11.5px; border-bottom:1px solid #ddd;}
@@ -896,6 +901,7 @@ const state = {
   rowOrder: {},         // key: group -> [row-key,...] 견적 작성 화면에서 드래그로 바꾼 항목 표시 순서
   indirectItemsCache: [], // 설정에서 관리하는 간접공사비 항목 목록 [{id,label,percent}]
   indirectChecked: {},   // key: indirect_cost_items.id -> true/false (이 견적에서 포함 여부, 기본 true)
+  customerAddressCache: '', // 인쇄용 프로젝트명 자동생성(동+아파트명)에 씀
   phase: "picker",    // "picker" | "select" | "build"  (견적 작성 진행 단계)
   flow: null,         // "solo" | "consult"  (혼자 작업 / 고객 상담 모드)
   selectIdx: 0,       // (미사용 - 이전 버전 호환용)
@@ -1510,6 +1516,20 @@ async function fetchSavedQuotes(){
   const { data, error } = await q;
   state.savedQuotesCache = error ? [] : (data||[]);
   return state.savedQuotesCache;
+}
+async function loadCustomerAddressCache(){
+  if(!state.customerId) return;
+  const { data } = await sb.from('customers').select('address, road_address, jibun_address').eq('id', state.customerId).single();
+  state.customerAddressCache = data ? (data.road_address || data.jibun_address || data.address || '') : '';
+}
+function autoProjectTitleFromAddress(addr){
+  if(!addr) return '';
+  const dongMatch = addr.match(/([가-힣]+동)(?:\s|$)/);
+  const aptMatch = addr.match(/([가-힣A-Za-z0-9]+아파트)/);
+  const dong = dongMatch ? dongMatch[1] : '';
+  const apt = aptMatch ? aptMatch[1] : '';
+  if(!dong && !apt) return '';
+  return [dong, apt].filter(Boolean).join(' ') + ' 리모델링';
 }
 function autoQuoteLabel(){
   const now = new Date();
@@ -3726,6 +3746,7 @@ function buildPrintView(){
   CAT_ORDER.forEach(cid=>{
     const meta = CAT_META[cid];
     let catRows = '';
+    let catSum = 0;
     CAT_GROUPS[cid].forEach(group=>{
       CATALOG[group].items.forEach((raw,i)=>{
         const st = getQty(group,i);
@@ -3734,53 +3755,59 @@ function buildPrintView(){
           const parts = rowPriceParts(group,i);
           const price = parts.mat+parts.labor+parts.exp;
           const amt = lineAmt(price,st.q);
-          const rowHtml = '<tr><td>'+escapeHtml(it.n)+(it.s?' <span style="color:#888">('+escapeHtml(it.s)+')</span>':'')+(it.note?' <span style="color:#B5842C">['+escapeHtml(it.note)+']</span>':'')+'</td><td>'+escapeHtml(it.u)+'</td>'+
+          const rowHtml = '<tr><td>'+escapeHtml(it.n)+(it.s?' <span style="color:#888">('+escapeHtml(it.s)+')</span>':'')+(it.note?' <span style="color:#B5842C">['+escapeHtml(it.note)+']</span>':'')+'</td><td>'+escapeHtml(it.u)+'</td><td class="p-right">'+st.q+'</td>'+
             '<td class="p-right">'+(parts.mat>0?won(parts.mat):'-')+'</td><td class="p-right">'+(parts.labor>0?won(parts.labor):'-')+'</td><td class="p-right">'+(parts.exp>0?won(parts.exp):'-')+'</td>'+
-            '<td class="p-right">'+st.q+'</td><td class="p-right">'+won(amt)+'</td></tr>';
+            '<td class="p-right">'+won(amt)+'</td></tr>';
           if(st.opt) optionRows += '<tr><td>'+meta.no+'. '+meta.title+' — '+escapeHtml(it.n)+(it.s?' ('+escapeHtml(it.s)+')':'')+'</td><td>'+escapeHtml(it.u)+'</td><td class="p-right">'+st.q+'</td><td class="p-right">'+won(amt)+'</td></tr>';
-          else catRows += rowHtml;
+          else { catRows += rowHtml; catSum += amt; }
         }
       });
       getCustomList(group).forEach(it=>{
         if(it.q>0){
           const effPrice = customEffectivePrice(group, it);
           const amt = lineAmt(effPrice,it.q);
-          const rowHtml = '<tr><td>'+escapeHtml(it.n)+(it.s?' <span style="color:#888">('+escapeHtml(it.s)+')</span>':'')+(it.note?' <span style="color:#B5842C">['+escapeHtml(it.note)+']</span>':'')+'</td><td>'+escapeHtml(it.u)+'</td>'+
+          const rowHtml = '<tr><td>'+escapeHtml(it.n)+(it.s?' <span style="color:#888">('+escapeHtml(it.s)+')</span>':'')+(it.note?' <span style="color:#B5842C">['+escapeHtml(it.note)+']</span>':'')+'</td><td>'+escapeHtml(it.u)+'</td><td class="p-right">'+it.q+'</td>'+
             '<td class="p-right">'+won(effPrice)+'</td><td class="p-right">-</td><td class="p-right">-</td>'+
-            '<td class="p-right">'+it.q+'</td><td class="p-right">'+won(amt)+'</td></tr>';
+            '<td class="p-right">'+won(amt)+'</td></tr>';
           if(it.opt) optionRows += '<tr><td>'+meta.no+'. '+meta.title+' — '+escapeHtml(it.n)+(it.s?' ('+escapeHtml(it.s)+')':'')+'</td><td>'+escapeHtml(it.u)+'</td><td class="p-right">'+it.q+'</td><td class="p-right">'+won(amt)+'</td></tr>';
-          else catRows += rowHtml;
+          else { catRows += rowHtml; catSum += amt; }
         }
       });
       if(isCarpenterDirectGroup(group)){
         const days = carpenterEffectiveDays(group);
         if(days>0){
           const wage = tradeDayWage(group);
-          catRows += '<tr><td>'+tradeLabel(group)+' 인건비 (품수)</td><td>품</td>'+
+          const laborAmt = days*wage;
+          catRows += '<tr><td>'+tradeLabel(group)+' 인건비 (품수)</td><td>품</td><td class="p-right">'+days+'</td>'+
             '<td class="p-right">-</td><td class="p-right">'+won(wage)+'</td><td class="p-right">-</td>'+
-            '<td class="p-right">'+days+'</td><td class="p-right">'+won(days*wage)+'</td></tr>';
+            '<td class="p-right">'+won(laborAmt)+'</td></tr>';
+          catSum += laborAmt;
         }
       }
     });
     if(catRows){
       rows += '<tr class="p-cat-row"><td colspan="7">'+meta.no+'. '+meta.title+'</td></tr>' + catRows;
+      rows += '<tr class="p-cat-sub"><td colspan="6">'+meta.title+' 소계</td><td class="p-right">'+won(catSum)+'</td></tr>';
     }
   });
   if(!rows){
     rows = '<tr><td colspan="7" style="text-align:center;color:#999;">선택된 항목이 없습니다.</td></tr>';
   }
+  const autoTitle = autoProjectTitleFromAddress(state.customerAddressCache);
+  const projectTitle = state.meta.project || autoTitle || '-';
   const html = ''+
-    '<div class="p-title">견 적 서</div>'+
-    '<div class="p-sub">DESIGN SANGSANG INTERIOR ESTIMATE</div>'+
+    '<div class="p-header">'+
+      '<div class="p-title">견 적 서</div>'+
+      '<div class="p-sub">DESIGN SANGSANG INTERIOR ESTIMATE</div>'+
+    '</div>'+
     '<div class="p-meta">'+
       '<div><span>공급자</span> 디자인상상 (585-02-03690)</div>'+
       '<div><span>견적일</span> '+today+'</div>'+
-      '<div><span>프로젝트/공사명</span> '+escapeHtml(state.meta.project||'-')+'</div>'+
-      '<div><span>고객명</span> '+escapeHtml(state.meta.customer||'-')+' 귀하</div>'+
-      '<div><span>전시장 주소</span> 서울 강동구 고덕로 133, 롯데캐슬퍼스트상가 209호 (암사동)</div>'+
-      '<div><span>담당자</span> 윤상돈 실장</div>'+
+      '<div><span>프로젝트/공사명</span> '+escapeHtml(projectTitle)+'</div>'+
+      '<div><span>고객명</span> '+escapeHtml(state.meta.customer||'-')+' 고객님</div>'+
+      '<div class="p-manager-row"><span>담당자</span> 윤상돈 실장 <span class="p-stamp-box">인</span></div>'+
     '</div>'+
-    '<table class="p-table"><thead><tr><th>품명 / 규격</th><th>단위</th><th class="p-right">재료비</th><th class="p-right">노무비</th><th class="p-right">경비</th><th class="p-right">수량</th><th class="p-right">금액</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+    '<table class="p-table"><thead><tr><th>품명 / 규격</th><th>단위</th><th class="p-right">수량</th><th class="p-right">재료비</th><th class="p-right">노무비</th><th class="p-right">경비</th><th class="p-right">금액</th></tr></thead><tbody>'+rows+'</tbody></table>'+
     '<table class="p-totals"><tbody>'+
       '<tr><td>'+(t.isDirect?'A. 실행원가 소계 (마진 0%)':'A. 직접공사비 소계')+'</td><td class="p-right">'+won(t.directTotal)+' 원</td></tr>'+
       (t.isDirect ? '' : t.indirectItems.filter(it=>it.checked).map(it=>'<tr><td class="p-indent">'+escapeHtml(it.label)+' ('+(Number(it.percent)||0)+'%)</td><td class="p-right">'+won(it.amt)+' 원</td></tr>').join(''))+
@@ -3861,6 +3888,7 @@ document.addEventListener('input', e=>{
     state.customerId = customerId || null;
     state.customerName = customerName ? decodeURIComponent(customerName) : null;
     await loadSnapshot(quoteId); // 내부에서 renderAll() 호출함
+    await loadCustomerAddressCache();
   } else if(customerId){
     // 고객 상세 화면에서 "새 견적 작성"으로 들어온 경우 - 이 브라우저에 남아있던 예전 임시저장본은 무시하고 항상 깨끗하게 새로 시작
     state.customerId = customerId;
@@ -3871,6 +3899,7 @@ document.addEventListener('input', e=>{
     updateQuoteTypeSwitch();
     bathroomGroupIds();
     renderAll();
+    await loadCustomerAddressCache();
   } else {
     // 독립적으로 열었을 때 (기존 동작 그대로)
     loadDraft();
