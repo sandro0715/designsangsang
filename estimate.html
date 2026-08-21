@@ -635,17 +635,17 @@ body.summary-collapsed .summary-toggle{transform:rotate(180deg);}
 @media print{
   @page{ size: landscape; margin: 14mm; @bottom-center{ content: "- " counter(page) " -"; font-size:9px; color:#888; } }
   body *{visibility:hidden;}
-  #printArea, #printArea *{visibility:visible;}
+  #printArea, #printArea *{visibility:visible; -webkit-print-color-adjust:exact; print-color-adjust:exact; color-adjust:exact;}
   #printArea{display:block; position:absolute; top:0; left:0; width:100%; padding:24px; font-size:12px;}
   .p-header{text-align:center; margin-bottom:4px;}
   .p-title{font-size:22px; font-weight:800; letter-spacing:.3em; margin-bottom:4px;}
   .p-sub{text-align:center; font-size:10px; color:#666; margin-bottom:18px;}
-  .p-meta{display:grid; grid-template-columns:1fr 1fr; gap:6px 24px; font-size:11px; margin-bottom:16px; border:1px solid #999; padding:10px 14px; border-radius:6px;}
+  .p-meta{display:grid; grid-template-columns:1fr 1fr; gap:6px 24px; font-size:11px; margin-bottom:16px; border:1px solid #ccc; padding:10px 14px; border-radius:6px;}
   .p-meta div span{color:#666;}
   .p-manager-row{position:relative;}
   .p-stamp-box{display:inline-block; margin-left:8px; font-size:11px; color:#555; vertical-align:middle;}
   table.p-table{width:100%; border-collapse:collapse; margin-bottom:4px;}
-  table.p-table th, table.p-table td{border:1px solid #ccc; padding:5px 7px; font-size:11px;}
+  table.p-table th, table.p-table td{border:0.5px solid #ddd; padding:5px 7px; font-size:11px;}
   table.p-table thead{display:table-header-group;} /* 페이지 넘어갈 때 헤더 행 반복 */
   table.p-table th{background:#CCCCCC; font-weight:800; color:#222;}
   .p-cat-row td{background:#E9E9E9; font-weight:800; color:#222;}
@@ -655,12 +655,12 @@ body.summary-collapsed .summary-toggle{transform:rotate(180deg);}
   .p-page1{page-break-after:always; break-after:page;}
   .p-summary-grid{display:grid; grid-template-columns:1fr 1fr; gap:40px; margin-top:26px;}
   .p-summary-title{font-size:12px; font-weight:800; color:#4E3A21; margin-bottom:10px; padding-bottom:6px; border-bottom:1.5px solid #4E3A21;}
-  .p-catsum-row{display:flex; justify-content:space-between; font-size:11.5px; padding:6px 4px; border-bottom:1px solid #eee;}
+  .p-catsum-row{display:flex; justify-content:space-between; font-size:11.5px; padding:6px 4px; border-bottom:0.5px solid #eee;}
   .p-totals-box{padding-top:32px;}
   .p-totals{width:320px; margin-left:auto; margin-top:12px; border-collapse:collapse;}
-  .p-totals td{padding:5px 8px; font-size:11.5px; border-bottom:1px solid #ddd;}
-  .p-totals tr.final td{font-weight:800; font-size:14px; border-top:2px solid #222; border-bottom:none;}
-  .p-note{margin-top:18px; font-size:10px; color:#777; line-height:1.6;}
+  .p-totals td{padding:5px 8px; font-size:11.5px; border-bottom:0.5px solid #ddd;}
+  .p-totals tr.final td{font-weight:800; font-size:14px; border-top:1.5px solid #222; border-bottom:none;}
+  .p-note{margin-top:16px; font-size:12.5px; color:#555; line-height:1.9;}
   .p-option-title{margin-top:22px; font-size:11px; font-weight:800; color:#3E5C6B; border-top:1.5px dashed #999; padding-top:14px;}
   .p-option-table{margin-top:8px; font-size:10.5px; opacity:.9;}
   .p-option-table th{color:#3E5C6B;}
@@ -3842,9 +3842,9 @@ function buildPrintView(){
         '</div>'+
         '<div class="p-totals-box">'+
           totalsTableHTML+
+          footerNoteHTML+
         '</div>'+
       '</div>'+
-      footerNoteHTML+
     '</div>';
   const page2 = ''+
     '<div class="p-page p-page2">'+
