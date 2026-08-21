@@ -1374,7 +1374,7 @@ function groupSum(group){
     let matSum = 0, expSum = 0;
     CATALOG[group].items.forEach((it,i)=>{
       const st = getQty(group,i);
-      if(st.q>0 && !st.opt){ matSum += itemMaterialRaw(group,i)*st.q; expSum += itemExpenseRaw(group,i)*st.q; }
+      if(st.q>0 && !st.opt && effItem(group,i).n){ matSum += itemMaterialRaw(group,i)*st.q; expSum += itemExpenseRaw(group,i)*st.q; }
     });
     getCustomList(group).forEach(it=>{ if(it.q>0 && !it.opt) matSum += lineAmt(customEffectivePrice(group,it), it.q); });
     // 인건비(품수 입력값 × 일당)를 견적 항목으로 포함해서 합산
@@ -1383,7 +1383,7 @@ function groupSum(group){
   let sum = 0;
   CATALOG[group].items.forEach((it,i)=>{
     const st = getQty(group,i);
-    if(st.q>0 && !st.opt) sum += lineAmt(computePrice(group,i), st.q);
+    if(st.q>0 && !st.opt && effItem(group,i).n) sum += lineAmt(computePrice(group,i), st.q);
   });
   getCustomList(group).forEach(it=>{
     if(it.q>0 && !it.opt) sum += lineAmt(customEffectivePrice(group,it), it.q);
@@ -1396,7 +1396,7 @@ function groupOptionSum(group){
     let sum = 0;
     CATALOG[group].items.forEach((it,i)=>{
       const st = getQty(group,i);
-      if(st.q>0 && st.opt) sum += lineAmt(itemMaterialRaw(group,i)+itemExpenseRaw(group,i), st.q);
+      if(st.q>0 && st.opt && effItem(group,i).n) sum += lineAmt(itemMaterialRaw(group,i)+itemExpenseRaw(group,i), st.q);
     });
     getCustomList(group).forEach(it=>{ if(it.q>0 && it.opt) sum += lineAmt(customEffectivePrice(group,it), it.q); });
     return sum;
@@ -1404,7 +1404,7 @@ function groupOptionSum(group){
   let sum = 0;
   CATALOG[group].items.forEach((it,i)=>{
     const st = getQty(group,i);
-    if(st.q>0 && st.opt) sum += lineAmt(computePrice(group,i), st.q);
+    if(st.q>0 && st.opt && effItem(group,i).n) sum += lineAmt(computePrice(group,i), st.q);
   });
   getCustomList(group).forEach(it=>{
     if(it.q>0 && it.opt) sum += lineAmt(customEffectivePrice(group,it), it.q);
@@ -1420,7 +1420,7 @@ function computeItemVatBase(){
     CAT_GROUPS[cid].forEach(group=>{
       CATALOG[group].items.forEach((raw,i)=>{
         const st = getQty(group,i);
-        if(st.q>0 && effItemQ(group,i).vatRequired){
+        if(st.q>0 && effItem(group,i).n && effItemQ(group,i).vatRequired){
           sum += lineAmt(rowDisplayPrice(group,i), st.q);
         }
       });
