@@ -633,7 +633,7 @@ body.summary-collapsed .summary-toggle{transform:rotate(180deg);}
 /* ===== Print view ===== */
 #printArea{display:none;}
 @media print{
-  @page{ size: landscape; margin: 14mm; }
+  @page{ size: landscape; margin: 14mm; @bottom-center{ content: "- " counter(page) " -"; font-size:9px; color:#888; } }
   body *{visibility:hidden;}
   #printArea, #printArea *{visibility:visible;}
   #printArea{display:block; position:absolute; top:0; left:0; width:100%; padding:24px; font-size:12px;}
@@ -643,11 +643,14 @@ body.summary-collapsed .summary-toggle{transform:rotate(180deg);}
   .p-meta{display:grid; grid-template-columns:1fr 1fr; gap:6px 24px; font-size:11px; margin-bottom:16px; border:1px solid #999; padding:10px 14px; border-radius:6px;}
   .p-meta div span{color:#666;}
   .p-manager-row{position:relative;}
-  .p-stamp-box{display:inline-block; margin-left:10px; width:26px; height:26px; line-height:24px; text-align:center; border:1.3px solid #999; border-radius:50%; font-size:9px; color:#888; vertical-align:middle;}
+  .p-stamp-box{display:inline-block; margin-left:8px; font-size:11px; color:#555; vertical-align:middle;}
   table.p-table{width:100%; border-collapse:collapse; margin-bottom:4px;}
   table.p-table th, table.p-table td{border:1px solid #ccc; padding:5px 7px; font-size:11px;}
-  table.p-table th{background:#E8E2CF; font-weight:800; color:#4E3A21;}
-  .p-cat-row td{background:#EDE4CC; font-weight:800; color:#4E3A21;}
+  table.p-table thead{display:table-header-group;} /* 페이지 넘어갈 때 헤더 행 반복 */
+  table.p-table th{background:#CCCCCC; font-weight:800; color:#222;}
+  .p-cat-row td{background:#E9E9E9; font-weight:800; color:#222;}
+  .p-spacer-row td{border:none; padding:5px 0; background:#fff;}
+  .p-center{text-align:center;}
   .p-right{text-align:right;}
   .p-totals{width:320px; margin-left:auto; margin-top:12px; border-collapse:collapse;}
   .p-totals td{padding:5px 8px; font-size:11.5px; border-bottom:1px solid #ddd;}
@@ -3742,6 +3745,7 @@ function buildPrintView(){
   const today = new Date().toLocaleDateString('ko-KR');
   let rows = '';
   let optionRows = '';
+  let isFirstCat = true;
   CAT_ORDER.forEach(cid=>{
     const meta = CAT_META[cid];
     let catRows = '';
@@ -3754,10 +3758,10 @@ function buildPrintView(){
           const parts = rowPriceParts(group,i);
           const price = parts.mat+parts.labor+parts.exp;
           const amt = lineAmt(price,st.q);
-          const rowHtml = '<tr><td>'+escapeHtml(it.n)+(it.s?' <span style="color:#888">('+escapeHtml(it.s)+')</span>':'')+(it.note?' <span style="color:#B5842C">['+escapeHtml(it.note)+']</span>':'')+'</td><td>'+escapeHtml(it.u)+'</td><td class="p-right">'+st.q+'</td>'+
+          const rowHtml = '<tr><td>'+escapeHtml(it.n)+(it.s?' <span style="color:#888">('+escapeHtml(it.s)+')</span>':'')+(it.note?' <span style="color:#B5842C">['+escapeHtml(it.note)+']</span>':'')+'</td><td class="p-center">'+escapeHtml(it.u)+'</td><td class="p-center">'+st.q+'</td>'+
             '<td class="p-right">'+(parts.mat>0?won(parts.mat):'-')+'</td><td class="p-right">'+(parts.labor>0?won(parts.labor):'-')+'</td><td class="p-right">'+(parts.exp>0?won(parts.exp):'-')+'</td>'+
             '<td class="p-right">'+won(amt)+'</td></tr>';
-          if(st.opt) optionRows += '<tr><td>'+meta.no+'. '+meta.title+' — '+escapeHtml(it.n)+(it.s?' ('+escapeHtml(it.s)+')':'')+'</td><td>'+escapeHtml(it.u)+'</td><td class="p-right">'+st.q+'</td><td class="p-right">'+won(amt)+'</td></tr>';
+          if(st.opt) optionRows += '<tr><td>'+meta.no+'. '+meta.title+' — '+escapeHtml(it.n)+(it.s?' ('+escapeHtml(it.s)+')':'')+'</td><td class="p-center">'+escapeHtml(it.u)+'</td><td class="p-center">'+st.q+'</td><td class="p-right">'+won(amt)+'</td></tr>';
           else { catRows += rowHtml; catSum += amt; }
         }
       });
@@ -3765,10 +3769,10 @@ function buildPrintView(){
         if(it.q>0){
           const effPrice = customEffectivePrice(group, it);
           const amt = lineAmt(effPrice,it.q);
-          const rowHtml = '<tr><td>'+escapeHtml(it.n)+(it.s?' <span style="color:#888">('+escapeHtml(it.s)+')</span>':'')+(it.note?' <span style="color:#B5842C">['+escapeHtml(it.note)+']</span>':'')+'</td><td>'+escapeHtml(it.u)+'</td><td class="p-right">'+it.q+'</td>'+
+          const rowHtml = '<tr><td>'+escapeHtml(it.n)+(it.s?' <span style="color:#888">('+escapeHtml(it.s)+')</span>':'')+(it.note?' <span style="color:#B5842C">['+escapeHtml(it.note)+']</span>':'')+'</td><td class="p-center">'+escapeHtml(it.u)+'</td><td class="p-center">'+it.q+'</td>'+
             '<td class="p-right">'+won(effPrice)+'</td><td class="p-right">-</td><td class="p-right">-</td>'+
             '<td class="p-right">'+won(amt)+'</td></tr>';
-          if(it.opt) optionRows += '<tr><td>'+meta.no+'. '+meta.title+' — '+escapeHtml(it.n)+(it.s?' ('+escapeHtml(it.s)+')':'')+'</td><td>'+escapeHtml(it.u)+'</td><td class="p-right">'+it.q+'</td><td class="p-right">'+won(amt)+'</td></tr>';
+          if(it.opt) optionRows += '<tr><td>'+meta.no+'. '+meta.title+' — '+escapeHtml(it.n)+(it.s?' ('+escapeHtml(it.s)+')':'')+'</td><td class="p-center">'+escapeHtml(it.u)+'</td><td class="p-center">'+it.q+'</td><td class="p-right">'+won(amt)+'</td></tr>';
           else { catRows += rowHtml; catSum += amt; }
         }
       });
@@ -3777,7 +3781,7 @@ function buildPrintView(){
         if(days>0){
           const wage = tradeDayWage(group);
           const laborAmt = days*wage;
-          catRows += '<tr><td>'+tradeLabel(group)+' 인건비 (품수)</td><td>품</td><td class="p-right">'+days+'</td>'+
+          catRows += '<tr><td>'+tradeLabel(group)+' 인건비 (품수)</td><td class="p-center">품</td><td class="p-center">'+days+'</td>'+
             '<td class="p-right">-</td><td class="p-right">'+won(wage)+'</td><td class="p-right">-</td>'+
             '<td class="p-right">'+won(laborAmt)+'</td></tr>';
           catSum += laborAmt;
@@ -3785,6 +3789,8 @@ function buildPrintView(){
       }
     });
     if(catRows){
+      if(!isFirstCat) rows += '<tr class="p-spacer-row"><td colspan="7">&nbsp;</td></tr>';
+      isFirstCat = false;
       rows += '<tr class="p-cat-row"><td colspan="6">'+meta.no+'. '+meta.title+'</td><td class="p-right">'+won(catSum)+'</td></tr>' + catRows;
     }
   });
@@ -3804,9 +3810,9 @@ function buildPrintView(){
       '<div><span>프로젝트/공사명</span> '+escapeHtml(projectTitle)+'</div>'+
       '<div><span>고객명</span> '+escapeHtml(state.meta.customer||'-')+' 고객님</div>'+
       '<div><span>전시장 주소</span> 서울 강동구 고덕로 133, 롯데캐슬퍼스트상가 209호 (암사동)</div>'+
-      '<div class="p-manager-row"><span>담당자</span> 윤상돈 실장 <span class="p-stamp-box">인</span></div>'+
+      '<div class="p-manager-row"><span>담당자</span> 윤상돈 실장 <span class="p-stamp-box">(인)</span></div>'+
     '</div>'+
-    '<table class="p-table"><thead><tr><th>품명 / 규격</th><th>단위</th><th class="p-right">수량</th><th class="p-right">재료비</th><th class="p-right">노무비</th><th class="p-right">경비</th><th class="p-right">금액</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+    '<table class="p-table"><thead><tr><th class="p-center">품명 / 규격</th><th class="p-center">단위</th><th class="p-center">수량</th><th class="p-right">재료비</th><th class="p-right">노무비</th><th class="p-right">경비</th><th class="p-right">금액</th></tr></thead><tbody>'+rows+'</tbody></table>'+
     '<table class="p-totals"><tbody>'+
       '<tr><td>'+(t.isDirect?'A. 실행원가 소계 (마진 0%)':'A. 직접공사비 소계')+'</td><td class="p-right">'+won(t.directTotal)+' 원</td></tr>'+
       (t.isDirect ? '' : t.indirectItems.filter(it=>it.checked).map(it=>'<tr><td class="p-indent">'+escapeHtml(it.label)+' ('+(Number(it.percent)||0)+'%)</td><td class="p-right">'+won(it.amt)+' 원</td></tr>').join(''))+
@@ -3818,7 +3824,7 @@ function buildPrintView(){
     '</tbody></table>'+
     (optionRows ? ''+
       '<div class="p-option-title">옵션 항목 (참고용 — 위 견적 금액에는 포함되지 않았습니다)</div>'+
-      '<table class="p-table p-option-table"><thead><tr><th>공종 · 품명 / 규격</th><th>단위</th><th class="p-right">수량</th><th class="p-right">참고 금액</th></tr></thead><tbody>'+optionRows+'</tbody></table>'+
+      '<table class="p-table p-option-table"><thead><tr><th class="p-center">공종 · 품명 / 규격</th><th class="p-center">단위</th><th class="p-center">수량</th><th class="p-right">참고 금액</th></tr></thead><tbody>'+optionRows+'</tbody></table>'+
     '' : '')+
     '<div class="p-note">'+
       '* 본 견적서는 V.A.T 포함 견적서이며, 발행일로부터 2주간 유효합니다.<br>* 상기 기재된 내용은 참고 단가 기준의 가견적이며, 현장 실측 및 자재·시공 방법 변경에 따라 조정될 수 있습니다.<br>* 입금계좌 : IBK기업은행 119-248205-04-016 (예금주 : 이윤정)</div>';
