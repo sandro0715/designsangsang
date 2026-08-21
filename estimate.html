@@ -652,6 +652,11 @@ body.summary-collapsed .summary-toggle{transform:rotate(180deg);}
   .p-spacer-row td{border:none; padding:5px 0; background:#fff;}
   .p-center{text-align:center;}
   .p-right{text-align:right;}
+  .p-page1{page-break-after:always; break-after:page;}
+  .p-summary-grid{display:grid; grid-template-columns:1fr 1fr; gap:40px; margin-top:26px;}
+  .p-summary-title{font-size:12px; font-weight:800; color:#4E3A21; margin-bottom:10px; padding-bottom:6px; border-bottom:1.5px solid #4E3A21;}
+  .p-catsum-row{display:flex; justify-content:space-between; font-size:11.5px; padding:6px 4px; border-bottom:1px solid #eee;}
+  .p-totals-box{padding-top:32px;}
   .p-totals{width:320px; margin-left:auto; margin-top:12px; border-collapse:collapse;}
   .p-totals td{padding:5px 8px; font-size:11.5px; border-bottom:1px solid #ddd;}
   .p-totals tr.final td{font-weight:800; font-size:14px; border-top:2px solid #222; border-bottom:none;}
@@ -3799,20 +3804,7 @@ function buildPrintView(){
   }
   const autoTitle = autoProjectTitleFromAddress(state.customerAddressCache);
   const projectTitle = state.meta.project || autoTitle || '-';
-  const html = ''+
-    '<div class="p-header">'+
-      '<div class="p-title">견 적 서</div>'+
-      '<div class="p-sub">DESIGN SANGSANG INTERIOR ESTIMATE</div>'+
-    '</div>'+
-    '<div class="p-meta">'+
-      '<div><span>공급자</span> 디자인상상 (585-02-03690)</div>'+
-      '<div><span>견적일</span> '+today+'</div>'+
-      '<div><span>프로젝트/공사명</span> '+escapeHtml(projectTitle)+'</div>'+
-      '<div><span>고객명</span> '+escapeHtml(state.meta.customer||'-')+' 고객님</div>'+
-      '<div><span>전시장 주소</span> 서울 강동구 고덕로 133, 롯데캐슬퍼스트상가 209호 (암사동)</div>'+
-      '<div class="p-manager-row"><span>담당자</span> 윤상돈 실장 <span class="p-stamp-box">(인)</span></div>'+
-    '</div>'+
-    '<table class="p-table"><thead><tr><th class="p-center">품명 / 규격</th><th class="p-center">단위</th><th class="p-center">수량</th><th class="p-right">재료비</th><th class="p-right">노무비</th><th class="p-right">경비</th><th class="p-right">금액</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+  const totalsTableHTML = ''+
     '<table class="p-totals"><tbody>'+
       '<tr><td>'+(t.isDirect?'A. 실행원가 소계 (마진 0%)':'A. 직접공사비 소계')+'</td><td class="p-right">'+won(t.directTotal)+' 원</td></tr>'+
       (t.isDirect ? '' : t.indirectItems.filter(it=>it.checked).map(it=>'<tr><td class="p-indent">'+escapeHtml(it.label)+' ('+(Number(it.percent)||0)+'%)</td><td class="p-right">'+won(it.amt)+' 원</td></tr>').join(''))+
@@ -3821,13 +3813,48 @@ function buildPrintView(){
       (!t.isDirect && t.adjustment>0 ? '<tr><td>금액 조정 (－)</td><td class="p-right">－'+won(t.adjustment)+' 원</td></tr>' : '')+
       '<tr><td>'+(t.isDirect ? '부가가치세'+(((t.vatOnFee?1:0)+(t.itemVat>0?1:0))>1 ? ' (수수료+항목별)' : (t.vatOnFee?' (수수료 10%)':(t.itemVat>0?' (항목별)':' (미포함)'))) : '부가가치세'+(t.vatIncluded?' (10%)':' (미포함)'))+'</td><td class="p-right">'+won(t.vat)+' 원</td></tr>'+
       '<tr class="final"><td>총 계</td><td class="p-right">'+won(t.grand)+' 원</td></tr>'+
-    '</tbody></table>'+
-    (optionRows ? ''+
-      '<div class="p-option-title">옵션 항목 (참고용 — 위 견적 금액에는 포함되지 않았습니다)</div>'+
-      '<table class="p-table p-option-table"><thead><tr><th class="p-center">공종 · 품명 / 규격</th><th class="p-center">단위</th><th class="p-center">수량</th><th class="p-right">참고 금액</th></tr></thead><tbody>'+optionRows+'</tbody></table>'+
-    '' : '')+
+    '</tbody></table>';
+  const footerNoteHTML = ''+
     '<div class="p-note">'+
       '* 본 견적서는 V.A.T 포함 견적서이며, 발행일로부터 2주간 유효합니다.<br>* 상기 기재된 내용은 참고 단가 기준의 가견적이며, 현장 실측 및 자재·시공 방법 변경에 따라 조정될 수 있습니다.<br>* 입금계좌 : IBK기업은행 119-248205-04-016 (예금주 : 이윤정)</div>';
+  const catSummaryRows = CAT_ORDER.filter(cid=>t.byCat[cid]>0).map(cid=>
+    '<div class="p-catsum-row"><span>'+CAT_META[cid].no+'. '+escapeHtml(CAT_META[cid].title)+'</span><span>'+won(t.byCat[cid])+'</span></div>'
+  ).join('');
+
+  const page1 = ''+
+    '<div class="p-page p-page1">'+
+      '<div class="p-header">'+
+        '<div class="p-title">견 적 서</div>'+
+        '<div class="p-sub">DESIGN SANGSANG INTERIOR ESTIMATE</div>'+
+      '</div>'+
+      '<div class="p-meta">'+
+        '<div><span>공급자</span> 디자인상상 (585-02-03690)</div>'+
+        '<div><span>견적일</span> '+today+'</div>'+
+        '<div><span>프로젝트/공사명</span> '+escapeHtml(projectTitle)+'</div>'+
+        '<div><span>고객명</span> '+escapeHtml(state.meta.customer||'-')+' 고객님</div>'+
+        '<div><span>전시장 주소</span> 서울 강동구 고덕로 133, 롯데캐슬퍼스트상가 209호 (암사동)</div>'+
+        '<div class="p-manager-row"><span>담당자</span> 윤상돈 실장 <span class="p-stamp-box">(인)</span></div>'+
+      '</div>'+
+      '<div class="p-summary-grid">'+
+        '<div class="p-catsum-box">'+
+          '<div class="p-summary-title">공종별 내역</div>'+
+          catSummaryRows+
+        '</div>'+
+        '<div class="p-totals-box">'+
+          totalsTableHTML+
+        '</div>'+
+      '</div>'+
+      footerNoteHTML+
+    '</div>';
+  const page2 = ''+
+    '<div class="p-page p-page2">'+
+      '<table class="p-table"><thead><tr><th class="p-center">품명 / 규격</th><th class="p-center">단위</th><th class="p-center">수량</th><th class="p-right">재료비</th><th class="p-right">노무비</th><th class="p-right">경비</th><th class="p-right">금액</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+      (optionRows ? ''+
+        '<div class="p-option-title">옵션 항목 (참고용 — 위 견적 금액에는 포함되지 않았습니다)</div>'+
+        '<table class="p-table p-option-table"><thead><tr><th class="p-center">공종 · 품명 / 규격</th><th class="p-center">단위</th><th class="p-center">수량</th><th class="p-right">참고 금액</th></tr></thead><tbody>'+optionRows+'</tbody></table>'+
+      '' : '')+
+    '</div>';
+  const html = page1 + page2;
   document.getElementById('printArea').innerHTML = html;
   window.print();
 }
