@@ -65,6 +65,14 @@ td.amt{font-weight:700;}
   <div class="layout">
     <div class="card">
       <h2>창 정보 입력</h2>
+      <div class="field">
+        <label>메이커</label>
+        <div style="display:flex; gap:6px;">
+          <select id="maker-select" style="flex:1;"></select>
+          <button class="btn-ghost-sm" id="btn-add-maker" title="새 메이커 추가">+ 추가</button>
+          <button class="btn-ghost-sm" id="btn-del-maker" title="이 메이커 삭제">삭제</button>
+        </div>
+      </div>
       <div class="field"><label>위치 (선택, 자유 입력)</label><input type="text" id="in-label" placeholder="예: 거실 발코니"></div>
       <div class="field"><label>창 계열</label></div>
       <div class="type-grid" id="frametype-grid" style="grid-template-columns:repeat(2,1fr);">
@@ -105,10 +113,11 @@ td.amt{font-weight:700;}
         </div>
         <div class="field"><label>시공 단가 (원/자평, 외창 기준)</label><input type="text" inputmode="numeric" class="money-input" id="rate-install" value="4,000"></div>
         <div class="field"><label>방충망 개당 단가 (원)</label><input type="text" inputmode="numeric" class="money-input" id="rate-screen" value="15,000"></div>
+        <button class="btn-ghost-sm" id="btn-save-maker" style="width:100%; padding:9px; margin-top:4px;">💾 지금 값을 이 메이커에 저장</button>
       </div>
 
       <button class="btn btn-primary" id="btn-add">+ 목록에 추가</button>
-      <div class="note">※ 발코니창/분합창은 외부 프레임 구조 자체가 달라서 단가를 따로 뒀어요. 시공단가(자평당 4,000원), 발코니 이중창 유리 결합단가(자평당 약 8,940원), 분합 이중창 유리(자평당 약 7,450원)는 실제 견적서 9건을 역산해서 맞춘 값이에요. 외부/내부(로이) 세부 배분은 정확한 원자재가가 아니라 합계가 맞도록 추정해서 나눈 값이니, 실제 거래처 견적 받으실 때마다 조정해서 정확도를 높여주세요.</div>
+      <div class="note">※ 메이커마다 프레임·유리 단가가 다를 수 있어서, 위 "메이커" 선택에서 전환하거나 "+ 추가"로 새 메이커를 만들 수 있어요. 값을 수정한 뒤 "이 메이커에 저장"을 눌러야 다음에 다시 켰을 때도 유지돼요. 지금 등록된 "LX 뷰프레임" 기본값은 실제 견적서 9건을 역산해서 맞춘 값이에요.</div>
     </div>
 
     <div class="card">
@@ -141,6 +150,40 @@ document.addEventListener('input', e=>{
     e.target.value = raw === '' ? '' : Number(raw).toLocaleString('ko-KR');
   }
 });
+
+/* ============ 메이커별 단가 프리셋 관리 (localStorage에 저장돼서 다음에 열어도 유지됨) ============ */
+const RATE_FIELD_IDS = ['rate-balcony-single','rate-balcony-double','rate-bunhap-single','rate-bunhap-double','in-glass-single','in-glass-outer','in-glass-inner','rate-install','rate-screen'];
+const DEFAULT_MAKER_NAME = 'LX 뷰프레임';
+const DEFAULT_RATES = {
+  'rate-balcony-single':'20,100', 'rate-balcony-double':'39,200',
+  'rate-bunhap-single':'13,500', 'rate-bunhap-double':'26,200',
+  'in-glass-single':'4,500', 'in-glass-outer':'3,700', 'in-glass-inner':'5,240',
+  'rate-install':'4,000', 'rate-screen':'15,000',
+};
+function loadMakerStore(){
+  let store;
+  try{ store = JSON.parse(localStorage.getItem('sashMakerPresets')||'null'); }catch(e){ store = null; }
+  if(!store || !store[DEFAULT_MAKER_NAME]) store = { [DEFAULT_MAKER_NAME]: DEFAULT_RATES };
+  return store;
+}
+function saveMakerStore(store){
+  localStorage.setItem('sashMakerPresets', JSON.stringify(store));
+}
+let makerStore = loadMakerStore();
+let currentMaker = Object.keys(makerStore)[0];
+
+function renderMakerSelect(){
+  const sel = document.getElementById('maker-select');
+  sel.innerHTML = Object.keys(makerStore).map(name=>'<option value="'+escapeHtml(name)+'" '+(name===currentMaker?'selected':'')+'>'+escapeHtml(name)+'</option>').join('');
+}
+function applyMakerRates(name){
+  const rates = makerStore[name];
+  if(!rates) return;
+  RATE_FIELD_IDS.forEach(id=>{
+    const el = document.getElementById(id);
+    if(el && rates[id] !== undefined) el.value = rates[id];
+  });
+}
 
 let currentType = 'FIX';
 let currentGlazing = '단창';
@@ -237,7 +280,7 @@ function updatePreview(){
     '유리 '+c.glassW.toFixed(0)+'×'+c.glassH.toFixed(0)+'mm '+c.n+'짝 (짝당 자평 '+c.paneJapyeong.toFixed(2)+', '+glassLabel+')'+
     (screenCnt>0 ? ' · 방충망 '+screenCnt+'개' : ' · 방충망 없음');
 
-  return { type:currentType, glazing:currentGlazing, frameType:currentFrameType, w, h, n:c.n, screenCnt, mfgAmt, glassAmt, installAmt, screenAmt, total };
+  return { maker:currentMaker, type:currentType, glazing:currentGlazing, frameType:currentFrameType, w, h, n:c.n, screenCnt, mfgAmt, glassAmt, installAmt, screenAmt, total };
 }
 
 function updateGlassBoxVisibility(){
@@ -296,7 +339,7 @@ function renderList(){
   } else {
     empty.style.display = 'none';
     tbody.innerHTML = list.map((it,idx)=>
-      '<tr><td>'+(it.label?escapeHtml(it.label)+' · ':'')+it.frameType+' '+it.glazing+' '+it.type+'</td>'+
+      '<tr><td>'+(it.label?escapeHtml(it.label)+' · ':'')+'['+escapeHtml(it.maker)+'] '+it.frameType+' '+it.glazing+' '+it.type+'</td>'+
       '<td>'+it.w+'×'+it.h+'mm'+(it.screenCnt>0?' · 방충망':'')+'</td>'+
       '<td class="r">'+won(it.mfgAmt)+'</td>'+
       '<td class="r">'+won(it.glassAmt)+'</td>'+
@@ -334,6 +377,48 @@ document.getElementById('btn-clear-list').addEventListener('click', ()=>{
   renderList();
 });
 
+document.getElementById('maker-select').addEventListener('change', e=>{
+  currentMaker = e.target.value;
+  applyMakerRates(currentMaker);
+  updatePreview();
+});
+document.getElementById('btn-add-maker').addEventListener('click', ()=>{
+  const name = prompt('새 메이커 이름을 입력해 주세요 (예: KCC, 이건창호 등)');
+  if(!name || !name.trim()) return;
+  const trimmed = name.trim();
+  if(makerStore[trimmed] && !confirm('이미 있는 메이커예요. 지금 화면 값으로 덮어쓸까요?')) return;
+  const rates = {};
+  RATE_FIELD_IDS.forEach(id=>{ rates[id] = document.getElementById(id).value; }); // 현재 화면 값을 시작점으로 복사
+  makerStore[trimmed] = rates;
+  saveMakerStore(makerStore);
+  currentMaker = trimmed;
+  renderMakerSelect();
+  applyMakerRates(currentMaker);
+  updatePreview();
+});
+document.getElementById('btn-del-maker').addEventListener('click', ()=>{
+  if(Object.keys(makerStore).length<=1){ alert('메이커가 하나뿐이면 삭제할 수 없어요.'); return; }
+  if(!confirm('"'+currentMaker+'" 메이커를 삭제할까요?')) return;
+  delete makerStore[currentMaker];
+  saveMakerStore(makerStore);
+  currentMaker = Object.keys(makerStore)[0];
+  renderMakerSelect();
+  applyMakerRates(currentMaker);
+  updatePreview();
+});
+document.getElementById('btn-save-maker').addEventListener('click', ()=>{
+  const rates = {};
+  RATE_FIELD_IDS.forEach(id=>{ rates[id] = document.getElementById(id).value; });
+  makerStore[currentMaker] = rates;
+  saveMakerStore(makerStore);
+  const btn = document.getElementById('btn-save-maker');
+  const orig = btn.textContent;
+  btn.textContent = '저장됐어요 ✓';
+  setTimeout(()=>{ btn.textContent = orig; }, 1500);
+});
+
+renderMakerSelect();
+applyMakerRates(currentMaker);
 updateGlassBoxVisibility();
 updatePreview();
 renderList();
