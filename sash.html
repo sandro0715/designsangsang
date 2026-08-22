@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>샷시 견적 계산기 - 디자인상상</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800&display=swap');
+*{box-sizing:border-box; margin:0; padding:0; font-family:'Pretendard',sans-serif;}
+:root{
+  --bg:#F3EEE1; --surface:#FBF8F0; --surface-2:#F0EADA; --line:#E4DCC8; --line-strong:#D8CDB2;
+  --ink:#2B2418; --ink-dim:#5C5240; --ink-faint:#93876E;
+  --accent:#B5842C; --accent-deep:#8A6218; --accent-soft:#F0E2C0; --danger:#9C3B2E;
+}
+body{background:var(--bg); color:var(--ink); padding:24px;}
+.wrap{max-width:1240px; margin:0 auto;}
+.page-head{margin-bottom:20px;}
+.page-head h1{font-size:22px; font-weight:800;}
+.page-head .desc{font-size:12.5px; color:var(--ink-faint); margin-top:4px;}
+.layout{display:grid; grid-template-columns:360px 1fr; gap:20px; align-items:start;}
+.card{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:20px;}
+.card h2{font-size:14px; font-weight:800; margin-bottom:14px; padding-bottom:10px; border-bottom:1.5px solid var(--line-strong);}
+.field{margin-bottom:12px;}
+.field label{display:block; font-size:11.5px; font-weight:700; color:var(--ink-dim); margin-bottom:5px;}
+.field input, .field select{width:100%; padding:9px 10px; border:1.3px solid var(--line-strong); border-radius:8px; font-size:13px; background:var(--surface); color:var(--ink);}
+.field-row{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+.type-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin-bottom:12px;}
+.type-btn{padding:10px 4px; border:1.3px solid var(--line-strong); border-radius:8px; background:var(--surface); font-size:12.5px; font-weight:700; color:var(--ink-dim); cursor:pointer;}
+.type-btn.active{background:var(--accent); border-color:var(--accent); color:#fff;}
+.chk-row{display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; margin-bottom:14px; cursor:pointer;}
+.rates-toggle{font-size:11.5px; color:var(--accent-deep); font-weight:700; cursor:pointer; margin:14px 0 10px; display:inline-block;}
+.rates-box{display:none; background:var(--surface-2); border-radius:10px; padding:14px; margin-bottom:14px;}
+.rates-box.open{display:block;}
+.rates-box .field{margin-bottom:10px;}
+.rates-box .field:last-child{margin-bottom:0;}
+.btn{width:100%; padding:13px; border-radius:10px; border:none; font-size:14px; font-weight:800; cursor:pointer;}
+.btn-primary{background:var(--accent-deep); color:#fff;}
+.btn-primary:hover{background:var(--accent);}
+.result-summary{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:18px;}
+.result-box{background:var(--surface-2); border-radius:10px; padding:14px; text-align:center;}
+.result-box .k{font-size:10.5px; color:var(--ink-faint); font-weight:700;}
+.result-box .v{font-size:16px; font-weight:800; margin-top:4px; color:var(--ink);}
+.result-detail{font-size:11.5px; color:var(--ink-faint); line-height:1.8; margin-bottom:18px; background:var(--surface-2); border-radius:10px; padding:12px 16px;}
+table{width:100%; border-collapse:collapse; font-size:12px;}
+th{text-align:left; font-size:10px; color:var(--ink-faint); font-weight:700; padding:7px 6px; border-bottom:1.5px solid var(--ink);}
+td{padding:8px 6px; border-bottom:1px solid var(--line);}
+th.r, td.r{text-align:right;}
+td.amt{font-weight:700;}
+.list-empty{text-align:center; color:var(--ink-faint); padding:30px 0; font-size:12.5px;}
+.grand-row{display:flex; justify-content:space-between; align-items:center; margin-top:16px; padding-top:16px; border-top:2px solid var(--ink);}
+.grand-row .label{font-size:14px; font-weight:800;}
+.grand-row .value{font-size:24px; font-weight:800; color:var(--accent-deep);}
+.btn-del{background:none; border:none; color:var(--danger); font-size:15px; cursor:pointer;}
+.btn-ghost-sm{background:none; border:1px solid var(--line-strong); border-radius:6px; padding:5px 10px; font-size:11px; font-weight:700; color:var(--ink-dim); cursor:pointer;}
+.top-actions{display:flex; justify-content:flex-end; gap:8px; margin-bottom:12px;}
+.note{font-size:10.5px; color:var(--ink-faint); margin-top:14px; line-height:1.7;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="page-head">
+    <h1>🪟 샷시 견적 계산기</h1>
+    <div class="desc">가로·세로 사이즈와 형태(창 종류)만 입력하면, 프레임 길이·유리 면적·자평을 자동으로 계산해서 항목을 뽑아줘요.</div>
+  </div>
+  <div class="layout">
+    <div class="card">
+      <h2>창 정보 입력</h2>
+      <div class="field"><label>위치 (선택, 자유 입력)</label><input type="text" id="in-label" placeholder="예: 거실 발코니"></div>
+      <div class="field"><label>창 계열</label></div>
+      <div class="type-grid" id="frametype-grid" style="grid-template-columns:repeat(2,1fr);">
+        <button class="type-btn active" data-frametype="발코니">발코니창</button>
+        <button class="type-btn" data-frametype="분합">분합창</button>
+      </div>
+      <div class="field"><label>단창 / 이중창</label></div>
+      <div class="type-grid" id="glazing-grid" style="grid-template-columns:repeat(2,1fr);">
+        <button class="type-btn active" data-glazing="단창">단창 (150 시리즈)</button>
+        <button class="type-btn" data-glazing="이중창">이중창 (250 시리즈)</button>
+      </div>
+      <div class="field"><label>형태</label></div>
+      <div class="type-grid" id="type-grid">
+        <button class="type-btn active" data-type="FIX">FIX</button>
+        <button class="type-btn" data-type="2W">2W</button>
+        <button class="type-btn" data-type="3W">3W</button>
+        <button class="type-btn" data-type="4W">4W</button>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>가로 (mm)</label><input type="number" id="in-width" placeholder="예: 2200"></div>
+        <div class="field"><label>세로 (mm)</label><input type="number" id="in-height" placeholder="예: 1800"></div>
+      </div>
+      <div id="glass-single-box" class="field"><label>유리 단가 (원/자평)</label><input type="text" inputmode="numeric" class="money-input" id="in-glass-single" value="2,000"></div>
+      <div id="glass-double-box" style="display:none;">
+        <div class="field-row">
+          <div class="field"><label>외부(일반=24T) 원/자평</label><input type="text" inputmode="numeric" class="money-input" id="in-glass-outer" value="2,000"></div>
+          <div class="field"><label>내부(로이) 원/자평</label><input type="text" inputmode="numeric" class="money-input" id="in-glass-inner" value="2,200"></div>
+        </div>
+        <div class="note" style="margin:0 0 6px;">발코니창 이중창에만 로이유리가 들어가요. 분합창은 이중창이어도 일반유리 두 장이라 단일 단가로 계산돼요.</div>
+      </div>
+      <label class="chk-row"><input type="checkbox" id="in-screen" checked> 방충망 포함</label>
+
+      <span class="rates-toggle" id="rates-toggle">⚙ 단가 직접 조정하기 ▾</span>
+      <div class="rates-box" id="rates-box">
+        <div class="field"><label>발코니창 · 단창(150) 단가 (원/m)</label><input type="text" inputmode="numeric" class="money-input" id="rate-balcony-single" value="20,100"></div>
+        <div class="field"><label>발코니창 · 이중창(250) 단가 (원/m)</label><input type="text" inputmode="numeric" class="money-input" id="rate-balcony-double" value="39,200"></div>
+        <div class="field"><label>분합창 · 단창(150) 단가 (원/m, 추정)</label><input type="text" inputmode="numeric" class="money-input" id="rate-bunhap-single" value="13,500"></div>
+        <div class="field"><label>분합창 · 이중창(250) 단가 (원/m)</label><input type="text" inputmode="numeric" class="money-input" id="rate-bunhap-double" value="26,200"></div>
+        <div class="field"><label>시공 단가 (원/자평, 외창 기준)</label><input type="text" inputmode="numeric" class="money-input" id="rate-install" value="4,000"></div>
+        <div class="field"><label>방충망 개당 단가 (원)</label><input type="text" inputmode="numeric" class="money-input" id="rate-screen" value="15,000"></div>
+      </div>
+
+      <button class="btn btn-primary" id="btn-add">+ 목록에 추가</button>
+      <div class="note">※ 발코니창/분합창은 외부 프레임 구조 자체가 달라서 단가를 따로 뒀어요. 분합창 데이터는 표본이 적어서(2건) 추정치예요. 시공단가(자평당 4,000원)는 9건 전부 정확히 일치해서 그대로 썼어요. 이중창 외부(일반) 단가는 24T(일반유리) 값을 기준으로 잡았고, 내부(로이)는 거기서 소폭만 더 얹었어요 — 실제 거래처 견적 받으실 때마다 조정해서 정확도를 높여주세요.</div>
+    </div>
+
+    <div class="card">
+      <h2>계산 결과</h2>
+      <div class="result-summary" id="preview-summary"></div>
+      <div class="result-detail" id="preview-detail"></div>
+
+      <div class="top-actions">
+        <button class="btn-ghost-sm" id="btn-clear-list">목록 비우기</button>
+      </div>
+      <table>
+        <thead><tr><th>구분/형태</th><th>규격</th><th class="r">제작금액</th><th class="r">유리금액</th><th class="r">시공금액</th><th class="r">방충망</th><th class="r">합계</th><th></th></tr></thead>
+        <tbody id="list-tbody"></tbody>
+      </table>
+      <div id="list-empty" class="list-empty">아직 추가된 항목이 없어요. 왼쪽에서 사이즈 입력하고 "목록에 추가"를 눌러보세요.</div>
+      <div class="grand-row">
+        <span class="label">전체 합계</span>
+        <span class="value" id="grand-total">₩ 0</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function won(n){ n = Math.round(n||0); return n.toLocaleString('ko-KR'); }
+function parseCommaNum(str){ if(!str) return 0; const n = Number(String(str).replace(/,/g,'')); return isNaN(n) ? 0 : n; }
+document.addEventListener('input', e=>{
+  if(e.target.classList && e.target.classList.contains('money-input')){
+    const raw = e.target.value.replace(/[^\d-]/g,'');
+    e.target.value = raw === '' ? '' : Number(raw).toLocaleString('ko-KR');
+  }
+});
+
+let currentType = 'FIX';
+let currentGlazing = '단창';
+let currentFrameType = '발코니';
+const list = [];
+
+function frameMeta(type){
+  if(type==='FIX') return { n:1, wDeduct:120, hDeduct:120, screenCount:0 };
+  const n = parseInt(type);
+  return { n, wDeduct: 120 + 240*(n-1), hDeduct: 240, screenCount: n===2?1:2 };
+}
+
+function computeWindow(type, glazing, outerW, outerH){
+  const { n, wDeduct, hDeduct, screenCount } = frameMeta(type);
+  const glassW = Math.max(0, outerW - wDeduct);
+  const glassH = Math.max(0, outerH - hDeduct);
+  const paneJapyeong = (glassW * glassH * n) / 90000; // 짝(sash) 전체의 유리 1개층 자평 (이중창이면 이 자평만큼이 외부/내부 각각 필요)
+  const outerJapyeong = (outerW * outerH) / 90000;
+
+  // 프레임 총 길이: 외곽 프레임 둘레 + 문(새시)별 프레임 둘레 합
+  const outerPerimeter = 2*(outerW + outerH);
+  const assemblyW = outerW - 120;
+  const assemblyH = outerH - 120;
+  const sashW = n>0 ? (assemblyW + 120*(n-1)) / n : assemblyW;
+  const sashPerimeterTotal = n * 2 * (sashW + assemblyH);
+  const frameLengthMm = outerPerimeter + sashPerimeterTotal;
+  const frameLengthM = frameLengthMm / 1000;
+
+  return { n, glassW, glassH, paneJapyeong, outerJapyeong, frameLengthM, screenCount };
+}
+
+function currentRates(){
+  return {
+    balconySingle: parseCommaNum(document.getElementById('rate-balcony-single').value),
+    balconyDouble: parseCommaNum(document.getElementById('rate-balcony-double').value),
+    bunhapSingle: parseCommaNum(document.getElementById('rate-bunhap-single').value),
+    bunhapDouble: parseCommaNum(document.getElementById('rate-bunhap-double').value),
+    install: parseCommaNum(document.getElementById('rate-install').value),
+    screen: parseCommaNum(document.getElementById('rate-screen').value),
+  };
+}
+function frameRateFor(frameType, glazing, rates){
+  if(frameType==='분합') return glazing==='이중창' ? rates.bunhapDouble : rates.bunhapSingle;
+  return glazing==='이중창' ? rates.balconyDouble : rates.balconySingle;
+}
+
+function updatePreview(){
+  const w = Number(document.getElementById('in-width').value)||0;
+  const h = Number(document.getElementById('in-height').value)||0;
+  const hasScreen = document.getElementById('in-screen').checked;
+  const rates = currentRates();
+  const summaryEl = document.getElementById('preview-summary');
+  const detailEl = document.getElementById('preview-detail');
+  if(w<=0 || h<=0){
+    summaryEl.innerHTML = '<div class="result-box" style="grid-column:1/-1;"><div class="k">가로·세로를 입력해 주세요</div></div>';
+    detailEl.innerHTML = '';
+    return null;
+  }
+  const c = computeWindow(currentType, currentGlazing, w, h);
+  const screenCnt = hasScreen ? c.screenCount : 0;
+  const frameRate = frameRateFor(currentFrameType, currentGlazing, rates);
+  const mfgAmt = Math.round(c.frameLengthM * frameRate);
+
+  // 유리금액: 발코니창+이중창만 외부(일반)+내부(로이)로 나눠서 계산. 그 외(단창, 또는 분합창 이중창)는 단일 단가 × 장수
+  let glassAmt, glassLabel;
+  const useLowE = currentGlazing==='이중창' && currentFrameType==='발코니';
+  if(useLowE){
+    const outerRate = parseCommaNum(document.getElementById('in-glass-outer').value);
+    const innerRate = parseCommaNum(document.getElementById('in-glass-inner').value);
+    glassAmt = Math.round(c.paneJapyeong * (outerRate + innerRate));
+    glassLabel = '외부(일반) '+outerRate.toLocaleString('ko-KR')+'원 + 내부(로이) '+innerRate.toLocaleString('ko-KR')+'원';
+  } else {
+    const singleRate = parseCommaNum(document.getElementById('in-glass-single').value);
+    const layerMultiplier = currentGlazing==='이중창' ? 2 : 1; // 분합창 이중창은 일반유리 두 장
+    glassAmt = Math.round(c.paneJapyeong * singleRate * layerMultiplier);
+    glassLabel = singleRate.toLocaleString('ko-KR')+'원/자평'+(layerMultiplier===2?' × 2장(일반유리)':'');
+  }
+  const installAmt = Math.round(c.outerJapyeong * rates.install);
+  const screenAmt = screenCnt * rates.screen;
+  const total = mfgAmt + glassAmt + installAmt + screenAmt;
+
+  summaryEl.innerHTML = ''+
+    '<div class="result-box"><div class="k">제작금액</div><div class="v">'+won(mfgAmt)+'</div></div>'+
+    '<div class="result-box"><div class="k">유리금액</div><div class="v">'+won(glassAmt)+'</div></div>'+
+    '<div class="result-box"><div class="k">시공금액</div><div class="v">'+won(installAmt)+'</div></div>'+
+    '<div class="result-box"><div class="k">합계</div><div class="v">'+won(total)+'</div></div>';
+  detailEl.innerHTML = ''+
+    currentFrameType+' · '+currentGlazing+' · 외창 자평 '+c.outerJapyeong.toFixed(2)+' · 프레임 총길이 '+c.frameLengthM.toFixed(2)+'m · '+
+    '유리 '+c.glassW.toFixed(0)+'×'+c.glassH.toFixed(0)+'mm '+c.n+'짝 (짝당 자평 '+c.paneJapyeong.toFixed(2)+', '+glassLabel+')'+
+    (screenCnt>0 ? ' · 방충망 '+screenCnt+'개' : ' · 방충망 없음');
+
+  return { type:currentType, glazing:currentGlazing, frameType:currentFrameType, w, h, n:c.n, screenCnt, mfgAmt, glassAmt, installAmt, screenAmt, total };
+}
+
+function updateGlassBoxVisibility(){
+  const useLowE = currentGlazing==='이중창' && currentFrameType==='발코니'; // 로이는 발코니창 이중창에만 적용
+  document.getElementById('glass-single-box').style.display = useLowE ? 'none' : 'block';
+  document.getElementById('glass-double-box').style.display = useLowE ? 'block' : 'none';
+}
+document.querySelectorAll('#frametype-grid .type-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('#frametype-grid .type-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    currentFrameType = btn.dataset.frametype;
+    updateGlassBoxVisibility();
+    updatePreview();
+  });
+});
+
+document.querySelectorAll('#glazing-grid .type-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('#glazing-grid .type-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    currentGlazing = btn.dataset.glazing;
+    updateGlassBoxVisibility();
+    updatePreview();
+  });
+});
+document.querySelectorAll('#type-grid .type-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('#type-grid .type-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    currentType = btn.dataset.type;
+    updatePreview();
+  });
+});
+['in-width','in-height','in-screen','in-glass-single','in-glass-outer','in-glass-inner','rate-balcony-single','rate-balcony-double','rate-bunhap-single','rate-bunhap-double','rate-install','rate-screen'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', updatePreview);
+});
+
+document.getElementById('rates-toggle').addEventListener('click', ()=>{
+  const box = document.getElementById('rates-box');
+  box.classList.toggle('open');
+  document.getElementById('rates-toggle').textContent = box.classList.contains('open') ? '⚙ 단가 직접 조정하기 ▴' : '⚙ 단가 직접 조정하기 ▾';
+});
+
+function renderList(){
+  const tbody = document.getElementById('list-tbody');
+  const empty = document.getElementById('list-empty');
+  if(list.length===0){
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+  } else {
+    empty.style.display = 'none';
+    tbody.innerHTML = list.map((it,idx)=>
+      '<tr><td>'+(it.label?escapeHtml(it.label)+' · ':'')+it.frameType+' '+it.glazing+' '+it.type+'</td>'+
+      '<td>'+it.w+'×'+it.h+'mm'+(it.screenCnt>0?' · 방충망':'')+'</td>'+
+      '<td class="r">'+won(it.mfgAmt)+'</td>'+
+      '<td class="r">'+won(it.glassAmt)+'</td>'+
+      '<td class="r">'+won(it.installAmt)+'</td>'+
+      '<td class="r">'+(it.screenAmt>0?won(it.screenAmt):'-')+'</td>'+
+      '<td class="r amt">'+won(it.total)+'</td>'+
+      '<td><button class="btn-del" data-idx="'+idx+'" title="삭제">×</button></td></tr>'
+    ).join('');
+    tbody.querySelectorAll('.btn-del').forEach(el=>{
+      el.addEventListener('click', ()=>{
+        list.splice(parseInt(el.dataset.idx,10),1);
+        renderList();
+      });
+    });
+  }
+  const grand = list.reduce((s,it)=>s+it.total,0);
+  document.getElementById('grand-total').textContent = '₩ '+won(grand);
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+document.getElementById('btn-add').addEventListener('click', ()=>{
+  const result = updatePreview();
+  if(!result){ alert('가로·세로 사이즈를 입력해 주세요.'); return; }
+  list.push(Object.assign({label: document.getElementById('in-label').value.trim()}, result));
+  renderList();
+  document.getElementById('in-label').value = '';
+  document.getElementById('in-width').value = '';
+  document.getElementById('in-height').value = '';
+  document.getElementById('in-width').focus();
+});
+document.getElementById('btn-clear-list').addEventListener('click', ()=>{
+  if(list.length===0) return;
+  if(!confirm('목록을 전부 비울까요?')) return;
+  list.length = 0;
+  renderList();
+});
+
+updateGlassBoxVisibility();
+updatePreview();
+renderList();
+</script>
+</body>
+</html>
