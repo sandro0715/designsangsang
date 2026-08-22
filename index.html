@@ -839,6 +839,7 @@ function renderMain(){
     if(!state.toolsSection) return renderToolsHub();
     if(state.toolsSection==='kitchen') return renderToolFrame('kitchen.html','주방 견적 계산기', true, ()=>{ state.toolsSection=null; renderMain(); }, '견적 도구');
     if(state.toolsSection==='tile') return renderToolFrame('tile.html','타일 수량 산출', true, ()=>{ state.toolsSection=null; renderMain(); }, '견적 도구');
+    if(state.toolsSection==='sash') return renderToolFrame('sash.html','샷시 견적 계산기', true, ()=>{ state.toolsSection=null; renderMain(); }, '견적 도구');
   }
   if(state.view==='projects') return renderProjects();
   if(state.view==='settings') return renderSettings();
@@ -1147,6 +1148,7 @@ function renderToolsHub(){
   const cards = [
     {id:'kitchen', icon:'🍳', title:'주방 견적 계산기', desc:'주방 도면을 그려가며 자재·시공 견적을 뽑아요.'},
     {id:'tile', icon:'◻️', title:'타일 수량 산출', desc:'공간별 타일 수량을 박스 단위까지 계산해요.'},
+    {id:'sash', icon:'🪟', title:'샷시 견적 계산기', desc:'가로·세로·형태만 입력하면 프레임·유리·시공 금액을 뽑아요.'},
   ];
   cards.forEach(c=>{
     html += '<button class="settings-card" data-tools-section="'+c.id+'">'+
