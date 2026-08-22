@@ -87,14 +87,6 @@ td.amt{font-weight:700;}
         <div class="field"><label>가로 (mm)</label><input type="number" id="in-width" placeholder="예: 2200"></div>
         <div class="field"><label>세로 (mm)</label><input type="number" id="in-height" placeholder="예: 1800"></div>
       </div>
-      <div id="glass-single-box" class="field"><label>유리 단가 (단창, 원/자평)</label><input type="text" inputmode="numeric" class="money-input" id="in-glass-single" value="4,500"></div>
-      <div id="glass-double-box" style="display:none;">
-        <div class="field-row">
-          <div class="field"><label>외부(일반=24T) 원/자평</label><input type="text" inputmode="numeric" class="money-input" id="in-glass-outer" value="3,700"></div>
-          <div class="field" id="glass-inner-field"><label>내부(로이) 원/자평</label><input type="text" inputmode="numeric" class="money-input" id="in-glass-inner" value="5,240"></div>
-        </div>
-        <div class="note" id="glass-double-note" style="margin:0 0 6px;">발코니창 이중창에만 로이유리가 들어가요. 분합창은 이중창이어도 일반유리 두 장(외부단가×2)이라 로이 없이 계산돼요.</div>
-      </div>
       <label class="chk-row"><input type="checkbox" id="in-screen" checked> 방충망 포함</label>
 
       <span class="rates-toggle" id="rates-toggle">⚙ 단가 직접 조정하기 ▾</span>
@@ -103,6 +95,14 @@ td.amt{font-weight:700;}
         <div class="field"><label>발코니창 · 이중창(250) 단가 (원/m)</label><input type="text" inputmode="numeric" class="money-input" id="rate-balcony-double" value="39,200"></div>
         <div class="field"><label>분합창 · 단창(150) 단가 (원/m, 추정)</label><input type="text" inputmode="numeric" class="money-input" id="rate-bunhap-single" value="13,500"></div>
         <div class="field"><label>분합창 · 이중창(250) 단가 (원/m)</label><input type="text" inputmode="numeric" class="money-input" id="rate-bunhap-double" value="26,200"></div>
+        <div id="glass-single-box" class="field"><label>유리 단가 (단창, 원/자평)</label><input type="text" inputmode="numeric" class="money-input" id="in-glass-single" value="4,500"></div>
+        <div id="glass-double-box" style="display:none;">
+          <div class="field-row">
+            <div class="field"><label>외부(일반=24T) 원/자평</label><input type="text" inputmode="numeric" class="money-input" id="in-glass-outer" value="3,700"></div>
+            <div class="field" id="glass-inner-field"><label>내부(로이) 원/자평</label><input type="text" inputmode="numeric" class="money-input" id="in-glass-inner" value="5,240"></div>
+          </div>
+          <div class="note" id="glass-double-note" style="margin:0 0 10px;">발코니창 이중창에만 로이유리가 들어가요. 분합창은 이중창이어도 일반유리 두 장(외부단가×2)이라 로이 없이 계산돼요.</div>
+        </div>
         <div class="field"><label>시공 단가 (원/자평, 외창 기준)</label><input type="text" inputmode="numeric" class="money-input" id="rate-install" value="4,000"></div>
         <div class="field"><label>방충망 개당 단가 (원)</label><input type="text" inputmode="numeric" class="money-input" id="rate-screen" value="15,000"></div>
       </div>
