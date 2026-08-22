@@ -739,15 +739,20 @@ body.summary-collapsed .summary-toggle{transform:rotate(180deg);}
 .window-calc-box{background:var(--surface-2); border:1.3px dashed var(--line-strong); border-radius:10px; padding:16px; margin-top:16px;}
 .sash-box{background:var(--accent-soft); border:1.3px solid var(--accent);}
 .sash-grid{grid-template-columns:1fr 1.2fr .8fr .8fr .8fr 1.2fr 1.2fr auto !important;}
-.sash-calc-grid{display:flex; flex-direction:column; gap:10px; max-width:480px;}
-.sash-calc-grid .field label{font-size:11px; font-weight:700; color:var(--ink-dim); display:block; margin-bottom:4px;}
-.sash-calc-grid .field select, .sash-calc-grid .field input{width:100%; padding:8px 9px; border:1.3px solid var(--line-strong); border-radius:8px; font-size:12.5px; background:var(--surface);}
-.sash-calc-grid .field-row{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
-.sash-toggle-row{display:flex; gap:6px; flex-wrap:wrap;}
-.sash-toggle-btn{padding:8px 12px; border:1.3px solid var(--line-strong); border-radius:8px; background:var(--surface); font-size:12px; font-weight:700; color:var(--ink-dim); cursor:pointer;}
+.sash-calc-row{display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap; margin-bottom:12px;}
+.sash-calc-row2{align-items:center;}
+.sash-inline-field label{font-size:10px; font-weight:700; color:var(--ink-dim); display:block; margin-bottom:4px;}
+.sash-inline-field select{padding:7px 8px; border:1.3px solid var(--line-strong); border-radius:7px; font-size:12px; background:var(--surface); min-width:90px;}
+.sash-size-field label{white-space:nowrap;}
+.sash-size-inputs{display:flex; align-items:center; gap:5px;}
+.sash-size-inputs input{width:70px; padding:7px 8px; border:1.3px solid var(--line-strong); border-radius:7px; font-size:12.5px; background:var(--surface); text-align:center;}
+.sash-size-inputs span{color:var(--ink-faint); font-size:12px;}
+.sash-toggle-row{display:flex; gap:4px; flex-wrap:wrap;}
+.sash-toggle-btn{padding:6px 10px; border:1.3px solid var(--line-strong); border-radius:7px; background:var(--surface); font-size:11.5px; font-weight:700; color:var(--ink-dim); cursor:pointer; white-space:nowrap;}
 .sash-toggle-btn.active{background:var(--accent-deep); border-color:var(--accent-deep); color:#fff;}
-.sash-calc-preview{background:var(--surface); border-radius:8px; padding:10px 12px; font-size:12px; line-height:1.6;}
-.chk-row{display:flex; align-items:center; gap:8px; font-size:12.5px; font-weight:600;}
+.sash-calc-preview{background:var(--surface); border-radius:8px; padding:8px 12px; font-size:11.5px; line-height:1.5; flex:1; min-width:220px;}
+.sash-screen-chk{flex:none;}
+.chk-row{display:flex; align-items:center; gap:6px; font-size:12px; font-weight:600; white-space:nowrap;}
 .window-calc-title{font-size:12.5px; font-weight:800; margin-bottom:10px;}
 .window-calc-grid{display:grid; grid-template-columns:1.3fr 1fr 1fr 1fr 1fr 1fr auto; gap:8px; align-items:center;}
 .window-calc-grid select, .window-calc-grid input{padding:8px 9px; border:1.3px solid var(--line-strong); border-radius:7px; font-size:12.5px;}
@@ -2349,27 +2354,29 @@ function windowCalcBoxHTML(group){
   return ''+
   '<div class="window-calc-box sash-box">'+
     '<div class="window-calc-title">샷시(창) 항목 추가 — 자동 계산</div>'+
-    '<div class="sash-calc-grid">'+
-      '<div class="field"><label>메이커</label><select id="sash-maker"></select></div>'+
-      '<div class="field"><label>위치 (선택)</label><select id="sash-position">'+ '<option value="">위치 선택</option>' + posOptions + '</select></div>'+
-      '<div class="field"><label>창 계열</label><div class="sash-toggle-row" id="sash-frametype-grid">'+
-        '<button type="button" class="sash-toggle-btn active" data-frametype="발코니">발코니창</button>'+
-        '<button type="button" class="sash-toggle-btn" data-frametype="분합">분합창</button>'+
+    '<div class="sash-calc-row">'+
+      '<div class="sash-inline-field"><label>메이커</label><select id="sash-maker"></select></div>'+
+      '<div class="sash-inline-field"><label>위치</label><select id="sash-position">'+ '<option value="">선택안함</option>' + posOptions + '</select></div>'+
+      '<div class="sash-inline-field"><label>창 계열</label><div class="sash-toggle-row" id="sash-frametype-grid">'+
+        '<button type="button" class="sash-toggle-btn active" data-frametype="발코니">발코니</button>'+
+        '<button type="button" class="sash-toggle-btn" data-frametype="분합">분합</button>'+
       '</div></div>'+
-      '<div class="field"><label>단창 / 이중창</label><div class="sash-toggle-row" id="sash-glazing-grid">'+
-        '<button type="button" class="sash-toggle-btn active" data-glazing="단창">단창(150)</button>'+
-        '<button type="button" class="sash-toggle-btn" data-glazing="이중창">이중창(250)</button>'+
+      '<div class="sash-inline-field"><label>단창/이중창</label><div class="sash-toggle-row" id="sash-glazing-grid">'+
+        '<button type="button" class="sash-toggle-btn active" data-glazing="단창">단창</button>'+
+        '<button type="button" class="sash-toggle-btn" data-glazing="이중창">이중창</button>'+
       '</div></div>'+
-      '<div class="field"><label>형태</label><div class="sash-toggle-row" id="sash-form-grid">'+
+      '<div class="sash-inline-field"><label>형태</label><div class="sash-toggle-row" id="sash-form-grid">'+
         '<button type="button" class="sash-toggle-btn active" data-form="FIX">FIX</button>'+
         '<button type="button" class="sash-toggle-btn" data-form="2W">2W</button>'+
         '<button type="button" class="sash-toggle-btn" data-form="3W">3W</button>'+
         '<button type="button" class="sash-toggle-btn" data-form="4W">4W</button>'+
       '</div></div>'+
-      '<div class="field-row"><div class="field"><label>가로(mm)</label><input type="number" id="sash-width" placeholder="예: 2200"></div><div class="field"><label>세로(mm)</label><input type="number" id="sash-height" placeholder="예: 1800"></div></div>'+
-      '<label class="chk-row"><input type="checkbox" id="sash-screen" checked> 방충망 포함</label>'+
+    '</div>'+
+    '<div class="sash-calc-row sash-calc-row2">'+
+      '<div class="sash-inline-field sash-size-field"><label>가로×세로(mm)</label><div class="sash-size-inputs"><input type="number" id="sash-width" placeholder="2200"><span>×</span><input type="number" id="sash-height" placeholder="1800"></div></div>'+
+      '<label class="chk-row sash-screen-chk"><input type="checkbox" id="sash-screen" checked> 방충망</label>'+
       '<div class="sash-calc-preview" id="sash-calc-preview">가로·세로를 입력해 주세요.</div>'+
-      '<button class="btn-add" id="sash-add-btn" data-group="'+group+'" style="width:100%;">+ 이 견적에 추가</button>'+
+      '<button class="btn-add" id="sash-add-btn" data-group="'+group+'">+ 이 견적에 추가</button>'+
     '</div>'+
     '<div class="window-calc-hint">"견적 도구 → 샷시 견적 계산기"랑 같은 메이커·단가를 그대로 써요. 단가 조정은 그 계산기에서 하시면 여기도 같이 반영돼요.</div>'+
   '</div>'+
